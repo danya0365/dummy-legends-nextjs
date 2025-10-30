@@ -970,6 +970,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
    * Subscribe to room updates via Realtime
    */
   subscribeToRoom: async (roomId: string) => {
+    const refreshRoomState = async () => {
+      try {
+        const { data: roomDetails, error } = await supabase.rpc(
+          "get_room_details",
+          { p_room_id: roomId }
+        );
+
+        if (error) throw error;
+        if (!roomDetails) return;
+
+        const details = parseRoomDetails(roomDetails);
+        const updatedRoom = mapRoomDetailsToGameRoom(details);
+
+        set((state) => {
+          const updates: Partial<GameStore> = {};
+          if (state.currentRoom?.id === roomId) {
+            updates.currentRoom = updatedRoom;
+          }
+
+          if (state.availableRooms.some((room) => room.id === roomId)) {
+            updates.availableRooms = state.availableRooms.map((room) =>
+              room.id === roomId ? updatedRoom : room
+            );
+          }
+
+          return Object.keys(updates).length > 0 ? updates : state;
+        });
+      } catch (error) {
+        console.error("Failed to refresh room state:", error);
+      }
+    };
+
     const channel = supabase
       .channel(`room:${roomId}`)
       .on(
@@ -980,9 +1012,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           table: "room_players",
           filter: `room_id=eq.${roomId}`,
         },
-        (payload) => {
+        async (payload) => {
           console.log("Room player update:", payload);
-          // TODO: Update currentRoom.players based on payload
+          await refreshRoomState();
         }
       )
       .on(
@@ -993,9 +1025,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           table: "game_rooms",
           filter: `id=eq.${roomId}`,
         },
-        (payload) => {
+        async (payload) => {
           console.log("Room update:", payload);
-          // TODO: Update currentRoom status, etc.
+          await refreshRoomState();
         }
       )
       .subscribe();
