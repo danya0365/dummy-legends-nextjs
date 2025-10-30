@@ -42,8 +42,32 @@ Dummy Legends - แพลตฟอร์มแข่งขันเกมไพ�
 - [x] Create master data for landing page
 - [x] Create mock data for landing page
 
-## Phase 2: Authentication & User System 🔜
-> ดูรายละเอียดเพิ่มเติมใน `TODO_FEATURES.md`
+## Phase 2: Authentication & User System ✅
+
+### 2.1 Authentication Store (Zustand) ✅
+- [x] Create auth types and interfaces
+- [x] Setup Zustand store with persist middleware
+- [x] Login action with validation
+- [x] Register action with validation
+- [x] Logout action
+- [x] Forgot password action
+- [x] Update user action
+- [x] Error handling
+
+### 2.2 Authentication Pages ✅
+- [x] Login page with form validation
+- [x] Register page with password strength indicator
+- [x] Forgot password page with success state
+- [x] Form error handling
+- [x] Loading states
+- [x] Dark mode support
+
+### 2.3 Header Integration ✅
+- [x] User menu dropdown
+- [x] Profile links
+- [x] Logout functionality
+- [x] Mobile responsive
+- [x] Authenticated/Unauthenticated states
 
 ## Phase 3: Game Core 🔜
 > ดูรายละเอียดเพิ่มเติมใน `TODO_FEATURES.md`
@@ -65,11 +89,12 @@ Dummy Legends - แพลตฟอร์มแข่งขันเกมไพ�
 ## Current Priority
 ~~1. MainLayout with Header, Footer, Theme Toggle~~ ✅ เสร็จสิ้น
 ~~2. Landing Page with Master Data และ Mock Data~~ ✅ เสร็จสิ้น
+~~3. Authentication System (Login, Register, Forgot Password)~~ ✅ เสร็จสิ้น
 
-**Next Steps:**
-1. Authentication System (Login, Register, Forgot Password)
-2. Game Room System (Lobby, Create Room, Join Room)
-3. Tournament System (Browse, Details, Registration)
+**Next Steps (Phase 3: Game Core):**
+1. Game Lobby System
+2. Create/Join Room Functionality
+3. Game Room UI with Player List
 
 ## Notes
 - ✅ = Completed
