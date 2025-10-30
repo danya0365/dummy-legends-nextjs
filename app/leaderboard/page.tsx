@@ -1,3 +1,4 @@
+import { MainLayout } from "@/src/presentation/components/layout";
 import { LeaderboardView } from "@/src/presentation/components/leaderboard/LeaderboardView";
 import type { Metadata } from "next";
 
@@ -10,5 +11,9 @@ export const metadata: Metadata = {
  * Leaderboard Page
  */
 export default function LeaderboardPage() {
-  return <LeaderboardView />;
+  return (
+    <MainLayout>
+      <LeaderboardView />
+    </MainLayout>
+  );
 }

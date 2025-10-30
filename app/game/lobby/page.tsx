@@ -1,4 +1,5 @@
 import { GameLobbyView } from "@/src/presentation/components/game/GameLobbyView";
+import { MainLayout } from "@/src/presentation/components/layout";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -10,5 +11,9 @@ export const metadata: Metadata = {
  * Game Lobby Page
  */
 export default function GameLobbyPage() {
-  return <GameLobbyView />;
+  return (
+    <MainLayout>
+      <GameLobbyView />
+    </MainLayout>
+  );
 }

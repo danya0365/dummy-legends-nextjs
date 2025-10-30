@@ -1,4 +1,5 @@
 import { CreateRoomView } from "@/src/presentation/components/game/CreateRoomView";
+import { MainLayout } from "@/src/presentation/components/layout";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -10,5 +11,9 @@ export const metadata: Metadata = {
  * Create Room Page
  */
 export default function CreateRoomPage() {
-  return <CreateRoomView />;
+  return (
+    <MainLayout>
+      <CreateRoomView />
+    </MainLayout>
+  );
 }

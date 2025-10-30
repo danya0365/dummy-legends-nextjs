@@ -1,4 +1,5 @@
 import { GameRoomView } from "@/src/presentation/components/game/GameRoomView";
+import { MainLayout } from "@/src/presentation/components/layout";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -16,5 +17,9 @@ interface GameRoomPageProps {
 export default async function GameRoomPage({ params }: GameRoomPageProps) {
   const resolvedParams = await params;
 
-  return <GameRoomView roomId={resolvedParams.roomId} />;
+  return (
+    <MainLayout>
+      <GameRoomView roomId={resolvedParams.roomId} />
+    </MainLayout>
+  );
 }
