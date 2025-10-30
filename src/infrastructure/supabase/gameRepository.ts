@@ -20,19 +20,33 @@ export class GameRepository {
   /**
    * Create a new game room
    */
-  async createRoom(data: CreateRoomData): Promise<GameRoom> {
+  async createRoom(
+    data: CreateRoomData,
+    guestId?: string,
+    guestName?: string
+  ): Promise<GameRoom> {
+    // Use guest function if guest ID provided
+    const functionName = guestId ? "create_game_room_guest" : "create_game_room";
+    
+    const params: any = {
+      p_name: data.name,
+      p_mode: data.mode,
+      p_max_players: data.maxPlayers,
+      p_bet_amount: data.betAmount,
+      p_time_limit: data.timeLimit,
+      p_is_private: data.isPrivate,
+      p_password: data.password || undefined,
+      p_allow_spectators: data.allowSpectators,
+    };
+
+    if (guestId) {
+      params.p_guest_id = guestId;
+      params.p_guest_name = guestName;
+    }
+
     const { data: result, error } = await supabaseClient.rpc(
-      "create_game_room",
-      {
-        p_name: data.name,
-        p_mode: data.mode,
-        p_max_players: data.maxPlayers,
-        p_bet_amount: data.betAmount,
-        p_time_limit: data.timeLimit,
-        p_is_private: data.isPrivate,
-        p_password: data.password || undefined,
-        p_allow_spectators: data.allowSpectators,
-      }
+      functionName as any,
+      params
     );
 
     if (error) {
@@ -46,12 +60,26 @@ export class GameRepository {
   /**
    * Join an existing room
    */
-  async joinRoom(data: JoinRoomData): Promise<void> {
-    const { error } = await supabaseClient.rpc("join_game_room", {
+  async joinRoom(
+    data: JoinRoomData,
+    guestId?: string,
+    guestName?: string
+  ): Promise<void> {
+    // Use guest function if guest ID provided
+    const functionName = guestId ? "join_game_room_guest" : "join_game_room";
+    
+    const params: any = {
       p_room_id: data.roomId || undefined,
       p_room_code: data.roomCode || undefined,
       p_password: data.password || undefined,
-    });
+    };
+
+    if (guestId) {
+      params.p_guest_id = guestId;
+      params.p_guest_name = guestName;
+    }
+
+    const { error } = await supabaseClient.rpc(functionName as any, params);
 
     if (error) {
       console.error("Error joining room:", error);
@@ -62,10 +90,21 @@ export class GameRepository {
   /**
    * Leave a room
    */
-  async leaveRoom(roomId: string): Promise<void> {
-    const { error } = await supabaseClient.rpc("leave_game_room", {
+  async leaveRoom(
+    roomId: string,
+    guestId?: string
+  ): Promise<void> {
+    const functionName = guestId ? "leave_game_room_guest" : "leave_game_room";
+    
+    const params: any = {
       p_room_id: roomId,
-    });
+    };
+
+    if (guestId) {
+      params.p_guest_id = guestId;
+    }
+
+    const { error } = await supabaseClient.rpc(functionName as any, params);
 
     if (error) {
       console.error("Error leaving room:", error);
@@ -76,26 +115,46 @@ export class GameRepository {
   /**
    * Toggle ready status
    */
-  async toggleReady(roomId: string): Promise<boolean> {
-    const { data, error } = await supabaseClient.rpc("toggle_ready_status", {
+  async toggleReady(
+    roomId: string,
+    guestId?: string
+  ): Promise<void> {
+    const functionName = guestId ? "toggle_ready_status_guest" : "toggle_ready_status";
+    
+    const params: any = {
       p_room_id: roomId,
-    });
+    };
 
-    if (error) {
-      console.error("Error toggling ready:", error);
-      throw new Error(error.message);
+    if (guestId) {
+      params.p_guest_id = guestId;
     }
 
-    return (data as { isReady: boolean }).isReady;
+    const { error } = await supabaseClient.rpc(functionName as any, params);
+
+    if (error) {
+      console.error("Error toggling ready status:", error);
+      throw new Error(error.message);
+    }
   }
 
   /**
    * Start game (host only)
    */
-  async startGame(roomId: string): Promise<void> {
-    const { error } = await supabaseClient.rpc("start_game", {
+  async startGame(
+    roomId: string,
+    guestId?: string
+  ): Promise<void> {
+    const functionName = guestId ? "start_game_guest" : "start_game";
+    
+    const params: any = {
       p_room_id: roomId,
-    });
+    };
+
+    if (guestId) {
+      params.p_guest_id = guestId;
+    }
+
+    const { error } = await supabaseClient.rpc(functionName as any, params);
 
     if (error) {
       console.error("Error starting game:", error);

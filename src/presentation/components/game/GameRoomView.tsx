@@ -83,10 +83,18 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
     }
   };
 
-  const isHost = currentRoom?.players.find((p) => p.userId === user?.id)?.isHost;
+  const isHost = currentRoom?.players.find(
+    (p) => p.userId === user?.id
+  )?.isHost;
   const currentPlayer = currentRoom?.players.find((p) => p.userId === user?.id);
-  const allPlayersReady = currentRoom?.players.every((p) => p.isReady || p.isHost);
-  const canStartGame = isHost && allPlayersReady && currentRoom && currentRoom.currentPlayerCount >= 2;
+  const allPlayersReady = currentRoom?.players.every(
+    (p) => p.isReady || p.isHost
+  );
+  const canStartGame =
+    isHost &&
+    allPlayersReady &&
+    currentRoom &&
+    currentRoom.currentPlayerCount >= 2;
 
   if (!currentRoom) {
     return (
@@ -117,7 +125,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
               ออกจากเกม
             </button>
           </div>
-          
+
           {/* Game Board */}
           <GameBoard />
         </div>
@@ -148,7 +156,10 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                   onClick={handleCopyCode}
                   className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
                 >
-                  รหัสห้อง: <span className="font-mono font-bold">{currentRoom.code}</span>
+                  รหัสห้อง:{" "}
+                  <span className="font-mono font-bold">
+                    {currentRoom.code}
+                  </span>
                   {copied ? (
                     <Check className="h-4 w-4 text-green-500" />
                   ) : (
@@ -200,28 +211,37 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <Users className="h-5 w-5 mx-auto mb-1 text-gray-600 dark:text-gray-400" />
-                  <div className="text-sm text-gray-600 dark:text-gray-400">ผู้เล่น</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    ผู้เล่น
+                  </div>
                   <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                    {currentRoom.currentPlayerCount}/{currentRoom.maxPlayerCount}
+                    {currentRoom.currentPlayerCount}/
+                    {currentRoom.maxPlayerCount}
                   </div>
                 </div>
                 <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <Coins className="h-5 w-5 mx-auto mb-1 text-yellow-500" />
-                  <div className="text-sm text-gray-600 dark:text-gray-400">เดิมพัน</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    เดิมพัน
+                  </div>
                   <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
                     ฿{currentRoom.settings.betAmount}
                   </div>
                 </div>
                 <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <Clock className="h-5 w-5 mx-auto mb-1 text-gray-600 dark:text-gray-400" />
-                  <div className="text-sm text-gray-600 dark:text-gray-400">เวลา/รอบ</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    เวลา/รอบ
+                  </div>
                   <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
                     {currentRoom.settings.timeLimit}วิ
                   </div>
                 </div>
                 <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <Eye className="h-5 w-5 mx-auto mb-1 text-gray-600 dark:text-gray-400" />
-                  <div className="text-sm text-gray-600 dark:text-gray-400">ผู้ชม</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    ผู้ชม
+                  </div>
                   <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
                     {currentRoom.settings.allowSpectators ? "เปิด" : "ปิด"}
                   </div>
@@ -286,7 +306,9 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                           พร้อม
                         </span>
                       ) : player.isHost ? (
-                        <span className="text-gray-400 dark:text-gray-500 text-sm">รอผู้เล่น</span>
+                        <span className="text-gray-400 dark:text-gray-500 text-sm">
+                          รอผู้เล่น
+                        </span>
                       ) : (
                         <span className="text-yellow-600 dark:text-yellow-400 text-sm">
                           กำลังเตรียมตัว...
@@ -298,7 +320,8 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
 
                 {/* Empty Slots */}
                 {Array.from({
-                  length: currentRoom.maxPlayerCount - currentRoom.currentPlayerCount,
+                  length:
+                    currentRoom.maxPlayerCount - currentRoom.currentPlayerCount,
                 }).map((_, idx) => (
                   <div
                     key={`empty-${idx}`}
@@ -381,13 +404,17 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">สถานะ</span>
+                  <span className="text-gray-600 dark:text-gray-400">
+                    สถานะ
+                  </span>
                   <span className="font-medium text-yellow-600 dark:text-yellow-400">
                     รอผู้เล่น
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">ผู้ชม</span>
+                  <span className="text-gray-600 dark:text-gray-400">
+                    ผู้ชม
+                  </span>
                   <span className="font-medium text-gray-900 dark:text-gray-100">
                     {currentRoom.spectators.length} คน
                   </span>

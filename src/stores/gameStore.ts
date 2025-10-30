@@ -18,6 +18,7 @@ import {
   dealCards,
   sortCards,
 } from "@/src/utils/cardUtils";
+import { useGuestStore } from "./guestStore";
 
 interface GameStore extends GameState {
   // Realtime subscription
@@ -80,7 +81,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const newRoom = await gameRepository.createRoom(data);
+      // Check if guest mode
+      const guestState = useGuestStore.getState();
+      const { guest, isGuestMode } = guestState;
+
+      let newRoom: GameRoom;
+      
+      if (isGuestMode && guest) {
+        // Create as guest
+        newRoom = await gameRepository.createRoom(
+          data,
+          guest.id,
+          guest.displayName
+        );
+      } else {
+        // Create as authenticated user
+        newRoom = await gameRepository.createRoom(data);
+      }
 
       set({
         currentRoom: newRoom,
@@ -112,7 +129,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      await gameRepository.joinRoom(data);
+      // Check if guest mode
+      const guestState = useGuestStore.getState();
+      const { guest, isGuestMode } = guestState;
+
+      if (isGuestMode && guest) {
+        // Join as guest
+        await gameRepository.joinRoom(data, guest.id, guest.displayName);
+      } else {
+        // Join as authenticated user
+        await gameRepository.joinRoom(data);
+      }
 
       // Get room details after joining
       const roomId = data.roomId || "";
@@ -168,7 +195,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Unsubscribe from room updates
       get().unsubscribeFromRoom();
 
-      await gameRepository.leaveRoom(currentRoom.id);
+      // Check if guest mode
+      const guestState = useGuestStore.getState();
+      const { guest, isGuestMode } = guestState;
+
+      if (isGuestMode && guest) {
+        await gameRepository.leaveRoom(currentRoom.id, guest.id);
+      } else {
+        await gameRepository.leaveRoom(currentRoom.id);
+      }
 
       set({
         currentRoom: null,
@@ -194,7 +229,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!currentRoom) return;
 
     try {
-      await gameRepository.toggleReady(currentRoom.id);
+      // Check if guest mode
+      const guestState = useGuestStore.getState();
+      const { guest, isGuestMode } = guestState;
+
+      if (isGuestMode && guest) {
+        await gameRepository.toggleReady(currentRoom.id, guest.id);
+      } else {
+        await gameRepository.toggleReady(currentRoom.id);
+      }
       // Room will be updated via realtime subscription
     } catch (error) {
       set({
@@ -218,7 +261,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
         throw new Error("ไม่พบห้องเกม");
       }
 
-      await gameRepository.startGame(currentRoom.id);
+      // Check if guest mode
+      const guestState = useGuestStore.getState();
+      const { guest, isGuestMode } = guestState;
+
+      if (isGuestMode && guest) {
+        await gameRepository.startGame(currentRoom.id, guest.id);
+      } else {
+        await gameRepository.startGame(currentRoom.id);
+      }
       // Room will be updated via realtime subscription
 
       set({ isLoading: false });

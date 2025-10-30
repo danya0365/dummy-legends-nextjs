@@ -14,25 +14,31 @@ export type Database = {
           action_data: Json
           action_type: string
           created_at: string | null
+          guest_id: string | null
+          guest_name: string | null
           id: string
           room_id: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           action_data?: Json
           action_type: string
           created_at?: string | null
+          guest_id?: string | null
+          guest_name?: string | null
           id?: string
           room_id: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           action_data?: Json
           action_type?: string
           created_at?: string | null
+          guest_id?: string | null
+          guest_name?: string | null
           id?: string
           room_id?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -50,7 +56,8 @@ export type Database = {
           created_at: string | null
           current_player_count: number
           finished_at: string | null
-          host_id: string
+          host_guest_id: string | null
+          host_id: string | null
           id: string
           max_player_count: number
           mode: Database["public"]["Enums"]["game_mode"]
@@ -66,7 +73,8 @@ export type Database = {
           created_at?: string | null
           current_player_count?: number
           finished_at?: string | null
-          host_id: string
+          host_guest_id?: string | null
+          host_id?: string | null
           id?: string
           max_player_count?: number
           mode?: Database["public"]["Enums"]["game_mode"]
@@ -82,7 +90,8 @@ export type Database = {
           created_at?: string | null
           current_player_count?: number
           finished_at?: string | null
-          host_id?: string
+          host_guest_id?: string | null
+          host_id?: string | null
           id?: string
           max_player_count?: number
           mode?: Database["public"]["Enums"]["game_mode"]
@@ -98,6 +107,7 @@ export type Database = {
       game_states: {
         Row: {
           created_at: string | null
+          current_turn_guest_id: string | null
           current_turn_user_id: string | null
           deck: Json
           discard_pile: Json
@@ -112,6 +122,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          current_turn_guest_id?: string | null
           current_turn_user_id?: string | null
           deck?: Json
           discard_pile?: Json
@@ -126,6 +137,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          current_turn_guest_id?: string | null
           current_turn_user_id?: string | null
           deck?: Json
           discard_pile?: Json
@@ -157,6 +169,7 @@ export type Database = {
           games_lost: number
           games_played: number
           games_won: number
+          guest_id: string | null
           highest_score: number
           id: string
           level: number
@@ -164,7 +177,7 @@ export type Database = {
           rank: number
           total_score: number
           updated_at: string | null
-          user_id: string
+          user_id: string | null
           win_rate: number
         }
         Insert: {
@@ -175,6 +188,7 @@ export type Database = {
           games_lost?: number
           games_played?: number
           games_won?: number
+          guest_id?: string | null
           highest_score?: number
           id?: string
           level?: number
@@ -182,7 +196,7 @@ export type Database = {
           rank?: number
           total_score?: number
           updated_at?: string | null
-          user_id: string
+          user_id?: string | null
           win_rate?: number
         }
         Update: {
@@ -193,6 +207,7 @@ export type Database = {
           games_lost?: number
           games_played?: number
           games_won?: number
+          guest_id?: string | null
           highest_score?: number
           id?: string
           level?: number
@@ -200,7 +215,7 @@ export type Database = {
           rank?: number
           total_score?: number
           updated_at?: string | null
-          user_id?: string
+          user_id?: string | null
           win_rate?: number
         }
         Relationships: [
@@ -313,6 +328,8 @@ export type Database = {
       }
       room_players: {
         Row: {
+          guest_id: string | null
+          guest_name: string | null
           id: string
           is_host: boolean
           is_ready: boolean
@@ -322,9 +339,11 @@ export type Database = {
           profile_id: string | null
           room_id: string
           status: Database["public"]["Enums"]["player_status"]
-          user_id: string
+          user_id: string | null
         }
         Insert: {
+          guest_id?: string | null
+          guest_name?: string | null
           id?: string
           is_host?: boolean
           is_ready?: boolean
@@ -334,9 +353,11 @@ export type Database = {
           profile_id?: string | null
           room_id: string
           status?: Database["public"]["Enums"]["player_status"]
-          user_id: string
+          user_id?: string | null
         }
         Update: {
+          guest_id?: string | null
+          guest_name?: string | null
           id?: string
           is_host?: boolean
           is_ready?: boolean
@@ -346,7 +367,7 @@ export type Database = {
           profile_id?: string | null
           room_id?: string
           status?: Database["public"]["Enums"]["player_status"]
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -374,6 +395,21 @@ export type Database = {
         Args: {
           p_name: string
           p_mode: Database["public"]["Enums"]["game_mode"]
+          p_max_players?: number
+          p_bet_amount?: number
+          p_time_limit?: number
+          p_is_private?: boolean
+          p_password?: string
+          p_allow_spectators?: boolean
+        }
+        Returns: Json
+      }
+      create_game_room_guest: {
+        Args: {
+          p_name: string
+          p_mode: Database["public"]["Enums"]["game_mode"]
+          p_guest_id?: string
+          p_guest_name?: string
           p_max_players?: number
           p_bet_amount?: number
           p_time_limit?: number
@@ -498,12 +534,26 @@ export type Database = {
         Args: { p_room_id?: string; p_room_code?: string; p_password?: string }
         Returns: Json
       }
+      join_game_room_guest: {
+        Args: {
+          p_room_id?: string
+          p_room_code?: string
+          p_password?: string
+          p_guest_id?: string
+          p_guest_name?: string
+        }
+        Returns: Json
+      }
       knock: {
         Args: { p_room_id: string; p_deadwood_value: number }
         Returns: Json
       }
       leave_game_room: {
         Args: { p_room_id: string }
+        Returns: Json
+      }
+      leave_game_room_guest: {
+        Args: { p_room_id: string; p_guest_id?: string }
         Returns: Json
       }
       meld_cards: {
@@ -529,8 +579,16 @@ export type Database = {
         Args: { p_room_id: string }
         Returns: Json
       }
+      start_game_guest: {
+        Args: { p_room_id: string; p_guest_id?: string }
+        Returns: Json
+      }
       toggle_ready_status: {
         Args: { p_room_id: string }
+        Returns: Json
+      }
+      toggle_ready_status_guest: {
+        Args: { p_room_id: string; p_guest_id?: string }
         Returns: Json
       }
       update_game_state: {

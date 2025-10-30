@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.game_rooms (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   code TEXT UNIQUE NOT NULL, -- 6-digit room code
   name TEXT NOT NULL,
-  host_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  host_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   status public.room_status NOT NULL DEFAULT 'waiting',
   mode public.game_mode NOT NULL DEFAULT 'casual',
   
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS public.game_actions (
 -- Player Statistics Table
 CREATE TABLE IF NOT EXISTS public.player_stats (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   
   level INTEGER NOT NULL DEFAULT 1,
@@ -172,9 +172,8 @@ FOR EACH ROW EXECUTE FUNCTION update_room_player_count();
 CREATE OR REPLACE FUNCTION create_player_stats_if_not_exists()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.player_stats (user_id, profile_id)
-  VALUES (NEW.user_id, NEW.profile_id)
-  ON CONFLICT (user_id) DO NOTHING;
+  INSERT INTO public.player_stats (user_id, profile_id, guest_id)
+  VALUES (NEW.user_id, NEW.profile_id, NEW.guest_id);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

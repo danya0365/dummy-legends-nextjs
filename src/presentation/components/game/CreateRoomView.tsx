@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useGameStore } from "@/src/stores/gameStore";
 import { useAuthStore } from "@/src/stores/authStore";
+import { useGuestStore } from "@/src/stores/guestStore";
 import {
   Users,
   Clock,
@@ -20,6 +21,7 @@ export function CreateRoomView() {
   const router = useRouter();
   const { createRoom, isLoading, error, clearError } = useGameStore();
   const { isAuthenticated } = useAuthStore();
+  const { isGuestMode } = useGuestStore();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -58,7 +60,8 @@ export function CreateRoomView() {
     e.preventDefault();
     clearError();
 
-    if (!isAuthenticated) {
+    // Allow both authenticated and guest users
+    if (!isAuthenticated && !isGuestMode) {
       router.push("/auth/login");
       return;
     }
