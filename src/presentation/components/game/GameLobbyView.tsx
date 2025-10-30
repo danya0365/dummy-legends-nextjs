@@ -1,26 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import type { GameMode, GameRoom } from "@/src/domain/types/game.types";
 import { useGameStore } from "@/src/stores/gameStore";
 import {
-  Users,
+  AlertCircle,
+  CheckCircle,
   Clock,
-  Lock,
-  Eye,
-  Trophy,
   Coins,
+  Edit3,
+  Eye,
+  Filter,
+  Lock,
   Plus,
   RefreshCw,
   Search,
-  Filter,
+  Trophy,
   UserPlus,
-  CheckCircle,
-  AlertCircle,
-  Edit3,
+  Users,
 } from "lucide-react";
-import type { GameRoom, GameMode } from "@/src/domain/types/game.types";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { GamerProfileModal } from "./GamerProfileModal";
 
 export function GameLobbyView() {
@@ -48,6 +48,9 @@ export function GameLobbyView() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<GameRoom | null>(null);
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [invitePassword, setInvitePassword] = useState("");
+  const [joinByCodeError, setJoinByCodeError] = useState<string | null>(null);
 
   useEffect(() => {
     // Initialize gamer first (guest or authenticated)
@@ -86,7 +89,8 @@ export function GameLobbyView() {
     return "ยังไม่ได้เพิ่มคำอธิบายโปรไฟล์";
   }, [gamerProfile, gamerProfileForm.bio]);
 
-  const profileAvatarUrl = gamerProfile?.avatarUrl || gamerProfileForm.avatarUrl;
+  const profileAvatarUrl =
+    gamerProfile?.avatarUrl || gamerProfileForm.avatarUrl;
   const profileInitial = profileDisplayName.charAt(0).toUpperCase() || "?";
   const profileStatus = gamerProfile?.isComplete
     ? {
@@ -137,6 +141,31 @@ export function GameLobbyView() {
     }
   };
 
+  const handleJoinByInviteCode = async () => {
+    const trimmedCode = inviteCode.trim().toUpperCase();
+    if (!trimmedCode) return;
+
+    setJoinByCodeError(null);
+    clearError();
+
+    try {
+      const joinedRoomId = await joinRoom({
+        roomCode: trimmedCode,
+        password: invitePassword.trim() || undefined,
+      });
+
+      setInviteCode("");
+      setInvitePassword("");
+      router.push(`/game/room/${joinedRoomId}`);
+    } catch (error) {
+      if (error instanceof Error) {
+        setJoinByCodeError(error.message);
+      } else {
+        setJoinByCodeError("ไม่สามารถเข้าร่วมห้องด้วยรหัสนี้ได้");
+      }
+    }
+  };
+
   const getModeBadgeColor = (mode: GameMode) => {
     switch (mode) {
       case "casual":
@@ -172,7 +201,9 @@ export function GameLobbyView() {
   };
 
   const filteredRooms = availableRooms.filter((room) => {
-    const matchesSearch = room.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = room.name
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
     const matchesMode = filterMode === "all" || room.mode === filterMode;
     return matchesSearch && matchesMode && room.status === "waiting";
   });
@@ -196,7 +227,8 @@ export function GameLobbyView() {
                   <div className="flex items-start gap-2">
                     <UserPlus className="mt-0.5 h-4 w-4 flex-shrink-0" />
                     <span>
-                      ตั้งค่าโปรไฟล์ผู้เล่นเพื่อให้เพื่อน ๆ รู้จักคุณมากขึ้นก่อนเข้าร่วมการแข่งขัน
+                      ตั้งค่าโปรไฟล์ผู้เล่นเพื่อให้เพื่อน ๆ
+                      รู้จักคุณมากขึ้นก่อนเข้าร่วมการแข่งขัน
                     </span>
                   </div>
                   <button
@@ -214,7 +246,9 @@ export function GameLobbyView() {
                 disabled={isLoading}
                 className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
               >
-                <RefreshCw className={`h-5 w-5 ${isLoading ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`h-5 w-5 ${isLoading ? "animate-spin" : ""}`}
+                />
                 รีเฟรช
               </button>
               <button
@@ -245,11 +279,6 @@ export function GameLobbyView() {
                       {profileInitial}
                     </div>
                   )}
-                  {!gamerProfile?.isComplete && (
-                    <span className="absolute -bottom-1 -right-1 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white shadow">
-                      ละเอียดเพิ่ม
-                    </span>
-                  )}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
@@ -278,10 +307,80 @@ export function GameLobbyView() {
                 </button>
                 {!gamerProfile?.isComplete && (
                   <p className="text-xs text-amber-600 dark:text-amber-300">
-                    โปรไฟล์เสร็จสมบูรณ์แล้วเพื่อน ๆ จะเห็นชื่อและรูปเท่ ๆ ของคุณในห้องเกม
+                    โปรไฟล์เสร็จสมบูรณ์แล้วเพื่อน ๆ จะเห็นชื่อและรูปเท่ ๆ
+                    ของคุณในห้องเกม
                   </p>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Join by Invite Code */}
+        <div className="mb-8">
+          <div className="rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 via-blue-50 to-white p-5 shadow-sm dark:border-purple-800 dark:from-purple-950/40 dark:via-blue-900/20 dark:to-gray-900">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  เข้าร่วมห้องจากรหัสเชิญ
+                </h2>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  วางรหัส 6 หลักที่เพื่อนส่งมาให้ แล้วกดเข้าร่วมได้ทันที
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-[2fr,1fr]">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  รหัสห้อง
+                </label>
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(event) => {
+                    const value = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                    setInviteCode(value.slice(0, 6));
+                    if (joinByCodeError) setJoinByCodeError(null);
+                  }}
+                  placeholder="เช่น ABC123"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 transition focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  รหัสผ่าน (ถ้ามี)
+                </label>
+                <input
+                  type="password"
+                  value={invitePassword}
+                  onChange={(event) => {
+                    setInvitePassword(event.target.value);
+                    if (joinByCodeError) setJoinByCodeError(null);
+                  }}
+                  placeholder="สำหรับห้องส่วนตัว"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 transition focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </div>
+            </div>
+
+            {joinByCodeError && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+                {joinByCodeError}
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                เคล็ดลับ: คุณสามารถป้อนรหัสได้โดยไม่ต้องออกจากหน้าล็อบบี้
+              </p>
+              <button
+                onClick={handleJoinByInviteCode}
+                disabled={!inviteCode || inviteCode.length < 4 || isLoading}
+                className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isLoading ? "กำลังเข้าร่วม..." : "เข้าร่วมด้วยรหัส"}
+              </button>
             </div>
           </div>
         </div>
@@ -315,7 +414,9 @@ export function GameLobbyView() {
             <Filter className="h-5 w-5 text-gray-400" />
             <select
               value={filterMode}
-              onChange={(e) => setFilterMode(e.target.value as GameMode | "all")}
+              onChange={(e) =>
+                setFilterMode(e.target.value as GameMode | "all")
+              }
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="all">ทุกโหมด</option>
@@ -332,7 +433,9 @@ export function GameLobbyView() {
           <div className="flex justify-center items-center h-64">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600 dark:text-gray-400">กำลังโหลดห้อง...</p>
+              <p className="text-gray-600 dark:text-gray-400">
+                กำลังโหลดห้อง...
+              </p>
             </div>
           </div>
         ) : filteredRooms.length === 0 ? (
@@ -364,8 +467,12 @@ export function GameLobbyView() {
                 {/* Room Header */}
                 <div className="p-4 bg-gradient-to-br from-blue-500 to-purple-600 text-white">
                   <div className="flex items-start justify-between mb-2">
-                    <h3 className="text-lg font-bold line-clamp-1">{room.name}</h3>
-                    {room.settings.isPrivate && <Lock className="h-5 w-5 flex-shrink-0" />}
+                    <h3 className="text-lg font-bold line-clamp-1">
+                      {room.name}
+                    </h3>
+                    {room.settings.isPrivate && (
+                      <Lock className="h-5 w-5 flex-shrink-0" />
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span
@@ -375,7 +482,9 @@ export function GameLobbyView() {
                     >
                       {getModeLabel(room.mode)}
                     </span>
-                    <span className="text-xs opacity-90">รหัส: {room.code}</span>
+                    <span className="text-xs opacity-90">
+                      รหัส: {room.code}
+                    </span>
                   </div>
                 </div>
 
@@ -401,7 +510,8 @@ export function GameLobbyView() {
                   <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                     <Coins className="h-4 w-4 text-yellow-500" />
                     <span className="text-sm">
-                      เดิมพัน: <span className="font-semibold text-yellow-600 dark:text-yellow-400">
+                      เดิมพัน:{" "}
+                      <span className="font-semibold text-yellow-600 dark:text-yellow-400">
                         ฿{formatCurrency(room.settings.betAmount)}
                       </span>
                     </span>
@@ -410,7 +520,9 @@ export function GameLobbyView() {
                   {/* Time Limit */}
                   <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                     <Clock className="h-4 w-4" />
-                    <span className="text-sm">{room.settings.timeLimit} วินาที/รอบ</span>
+                    <span className="text-sm">
+                      {room.settings.timeLimit} วินาที/รอบ
+                    </span>
                   </div>
 
                   {/* Host Info */}

@@ -232,7 +232,7 @@ interface GameStore extends RoomState {
   // Actions - Room
   initializeGamer: () => Promise<void>;
   createRoom: (data: CreateRoomData) => Promise<GameRoom>;
-  joinRoom: (data: JoinRoomData) => Promise<void>;
+  joinRoom: (data: JoinRoomData) => Promise<string>;
   leaveRoom: () => Promise<void>;
   toggleReady: () => void;
   startGame: () => Promise<void>;
@@ -614,7 +614,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const resolvedGamerId = get().gamerId!;
       const resolvedGuestId = get().guestId;
 
-      const { data: roomId, error } = await supabase.rpc("join_game_room", {
+      const { data: joinedRoomId, error } = await supabase.rpc("join_game_room", {
         p_gamer_id: resolvedGamerId,
         p_guest_identifier: resolvedGuestId || undefined,
         p_room_code: data.roomCode || undefined,
@@ -623,12 +623,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
 
       if (error) throw error;
-      if (!roomId) throw new Error("Failed to join room");
+      if (!joinedRoomId) throw new Error("Failed to join room");
 
       // Fetch room details
       const { data: roomDetails, error: detailsError } = await supabase.rpc(
         "get_room_details",
-        { p_room_id: roomId }
+        { p_room_id: joinedRoomId }
       );
 
       if (detailsError) throw detailsError;
@@ -643,18 +643,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
 
       // Subscribe to room updates
-      await get().subscribeToRoom(roomId);
+      await get().subscribeToRoom(joinedRoomId);
+
+      const { unsubscribeFromGame, loadGameState, subscribeToGameSession } = get();
+      await unsubscribeFromGame();
 
       if (room.status === "playing") {
         const sessionId = await get().fetchActiveSessionForRoom(room.id);
         if (sessionId) {
-          get().unsubscribeFromGame();
-          await get().loadGameState(sessionId);
-          await get().subscribeToGameSession(sessionId);
+          await loadGameState(sessionId);
+          await subscribeToGameSession(sessionId);
+        } else {
+          set({
+            currentSession: null,
+            myHand: [],
+            discardTop: null,
+            otherPlayers: [],
+          });
         }
+      } else {
+        set({
+          currentSession: null,
+          myHand: [],
+          discardTop: null,
+          otherPlayers: [],
+        });
       }
 
       set({ isLoading: false });
+      return joinedRoomId;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "เข้าร่วมห้องไม่สำเร็จ",
