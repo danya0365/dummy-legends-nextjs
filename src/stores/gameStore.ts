@@ -19,6 +19,7 @@ import type {
   GameStatePayload,
   OtherPlayer,
 } from "@/src/domain/types/gameplay.types";
+import type { Json } from "@/src/domain/types/supabase";
 import { supabaseClient as supabase } from "@/src/infrastructure/supabase/client";
 import { guestIdentifier } from "@/src/utils/guestIdentifier";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -81,22 +82,97 @@ const parseRoomDetails = (payload: unknown): RoomDetailsContent => {
   return payload;
 };
 
+const parseGamerPreferences = (preferences: unknown): Record<string, unknown> => {
+  if (preferences && typeof preferences === "object" && !Array.isArray(preferences)) {
+    return preferences as Record<string, unknown>;
+  }
+
+  return {};
+};
+
+const getPreferenceString = (
+  preferences: Record<string, unknown>,
+  key: string
+): string | null => {
+  const value = preferences[key];
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  return null;
+};
+
+const pickFirstNonEmptyString = (
+  ...values: Array<string | null | undefined>
+): string | null => {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+
+  return null;
+};
+
+const getRecordString = (
+  record: Record<string, unknown> | null | undefined,
+  key: string
+): string | null => {
+  if (!record) return null;
+  const value = record[key];
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  return null;
+};
+
+interface GamerProfileData {
+  displayName: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  isComplete: boolean;
+}
+
+interface GamerProfileFormState {
+  displayName: string;
+  avatarUrl: string;
+  bio: string;
+}
+
 const mapRoomPlayer = (player: RoomPlayerDetails): Player => {
   const gamer = player.gamer;
-  const username =
-    gamer.profile_id ?? gamer.guest_identifier ?? gamer.id ?? "unknown";
+  const preferences = parseGamerPreferences(gamer.preferences);
+  const preferenceDisplayName = getPreferenceString(preferences, "display_name");
+  const preferenceAvatarUrl = getPreferenceString(preferences, "avatar_url");
+
+  const fallbackUsername =
+    pickFirstNonEmptyString(
+      gamer.profile_id,
+      gamer.guest_identifier,
+      gamer.id
+    ) ?? "unknown";
+
   const displayName =
-    gamer.guest_display_name ??
-    gamer.profile_id ??
-    gamer.guest_identifier ??
-    username;
+    pickFirstNonEmptyString(
+      preferenceDisplayName,
+      gamer.guest_display_name,
+      fallbackUsername
+    ) ?? fallbackUsername;
+
+  const avatarUrl = pickFirstNonEmptyString(preferenceAvatarUrl);
 
   return {
     id: player.id,
     userId: player.gamer_id,
-    username,
+    username: fallbackUsername,
     displayName,
-    avatar: null,
+    avatar: avatarUrl,
     level: gamer.level ?? 1,
     elo: gamer.elo_rating ?? 0,
     status: player.status,
@@ -141,6 +217,10 @@ interface GameStore extends RoomState {
   gamerId: string | null;
   guestId: string | null;
   roomChannel: RealtimeChannel | null;
+  gamerProfile: GamerProfileData | null;
+  gamerProfileForm: GamerProfileFormState;
+  isGamerProfileModalOpen: boolean;
+  isSavingGamerProfile: boolean;
 
   // Game Play State
   currentSession: GameSession | null;
@@ -165,6 +245,10 @@ interface GameStore extends RoomState {
   updatePlayer: (playerId: string, updates: Partial<Player>) => void;
   setError: (error: string | null) => void;
   clearError: () => void;
+  openGamerProfileModal: () => void;
+  closeGamerProfileModal: () => void;
+  updateGamerProfileForm: (field: keyof GamerProfileFormState, value: string) => void;
+  saveGamerProfile: () => Promise<void>;
 
   // Actions - Gameplay
   fetchActiveSessionForRoom: (roomId: string) => Promise<string | null>;
@@ -191,6 +275,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   gamerId: null,
   guestId: null,
   roomChannel: null,
+  gamerProfile: null,
+  gamerProfileForm: {
+    displayName: "",
+    avatarUrl: "",
+    bio: "",
+  },
+  isGamerProfileModalOpen: false,
+  isSavingGamerProfile: false,
 
   // Initial State - Gameplay
   currentSession: null,
@@ -241,10 +333,192 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-      set({ gamerId, guestId });
+      const { data: gamerRecord, error: gamerRecordError } = await supabase
+        .from("gamers")
+        .select("guest_display_name, preferences, profile_id")
+        .eq("id", gamerId)
+        .maybeSingle();
+
+      if (gamerRecordError) throw gamerRecordError;
+
+      const preferences = parseGamerPreferences(gamerRecord?.preferences);
+      const preferenceDisplayName = getPreferenceString(
+        preferences,
+        "display_name"
+      );
+      const preferenceAvatarUrl = getPreferenceString(
+        preferences,
+        "avatar_url"
+      );
+      const preferenceBio = getPreferenceString(preferences, "bio");
+      const hasPreferenceDisplayName = !!preferenceDisplayName;
+
+      const displayNameFromRecord = pickFirstNonEmptyString(
+        gamerRecord?.guest_display_name
+      );
+
+      let activeProfile: Record<string, unknown> | null = null;
+
+      if (user) {
+        try {
+          const { data: profileData } = await supabase.rpc("get_active_profile");
+          if (Array.isArray(profileData) && profileData.length > 0) {
+            activeProfile = profileData[0] ?? null;
+          }
+        } catch (profileError) {
+          console.warn("Failed to fetch active profile", profileError);
+        }
+      }
+
+      const userMetadata = (user?.user_metadata ?? {}) as Record<string, unknown>;
+
+      const fallbackDisplayName =
+        pickFirstNonEmptyString(
+          preferenceDisplayName,
+          displayNameFromRecord,
+          getRecordString(activeProfile, "full_name"),
+          getRecordString(activeProfile, "username"),
+          getRecordString(userMetadata, "full_name"),
+          getRecordString(userMetadata, "display_name"),
+          getRecordString(userMetadata, "username"),
+          user?.email ? user.email.split("@")[0] : null
+        ) ?? "";
+
+      const fallbackAvatarUrl =
+        pickFirstNonEmptyString(
+          preferenceAvatarUrl,
+          getRecordString(activeProfile, "avatar_url"),
+          getRecordString(userMetadata, "avatar_url")
+        ) ?? "";
+
+      const fallbackBio =
+        pickFirstNonEmptyString(
+          preferenceBio,
+          getRecordString(activeProfile, "bio")
+        ) ?? "";
+
+      const shouldOpenModal = !hasPreferenceDisplayName;
+
+      set({
+        gamerId,
+        guestId,
+        gamerProfile: {
+          displayName: hasPreferenceDisplayName
+            ? preferenceDisplayName!
+            : fallbackDisplayName,
+          avatarUrl: hasPreferenceDisplayName
+            ? preferenceAvatarUrl ?? null
+            : fallbackAvatarUrl || null,
+          bio: hasPreferenceDisplayName
+            ? preferenceBio ?? null
+            : fallbackBio || null,
+          isComplete: hasPreferenceDisplayName,
+        },
+        gamerProfileForm: {
+          displayName: fallbackDisplayName,
+          avatarUrl: fallbackAvatarUrl,
+          bio: fallbackBio,
+        },
+        isGamerProfileModalOpen: shouldOpenModal,
+      });
     } catch (error) {
       console.error("Failed to initialize gamer:", error);
       set({ error: "ไม่สามารถสร้างผู้เล่นได้" });
+    }
+  },
+
+  openGamerProfileModal: () => {
+    const { gamerProfile, gamerProfileForm } = get();
+    const fallbackDisplayName = gamerProfileForm.displayName ?? "";
+    const fallbackAvatarUrl = gamerProfileForm.avatarUrl ?? "";
+    const fallbackBio = gamerProfileForm.bio ?? "";
+
+    set({
+      gamerProfileForm: {
+        displayName: gamerProfile?.displayName ?? fallbackDisplayName,
+        avatarUrl: gamerProfile?.avatarUrl ?? fallbackAvatarUrl,
+        bio: gamerProfile?.bio ?? fallbackBio,
+      },
+      isGamerProfileModalOpen: true,
+    });
+  },
+
+  closeGamerProfileModal: () => {
+    set({ isGamerProfileModalOpen: false });
+  },
+
+  updateGamerProfileForm: (field, value) => {
+    set((state) => ({
+      gamerProfileForm: {
+        ...state.gamerProfileForm,
+        [field]: value,
+      },
+    }));
+  },
+
+  saveGamerProfile: async () => {
+    const { gamerId, gamerProfileForm, guestId } = get();
+    if (!gamerId) {
+      throw new Error("ไม่พบข้อมูลผู้เล่น");
+    }
+
+    const displayName = gamerProfileForm.displayName.trim();
+    if (!displayName) {
+      throw new Error("กรุณากรอกชื่อผู้เล่น");
+    }
+
+    const avatarUrl = gamerProfileForm.avatarUrl.trim();
+    const bio = gamerProfileForm.bio.trim();
+
+    set({ isSavingGamerProfile: true });
+
+    try {
+      const preferencesPayload: Json = {
+        display_name: displayName,
+        avatar_url: avatarUrl || null,
+        bio: bio || null,
+      };
+
+      const { error: preferencesError } = await supabase.rpc(
+        "update_gamer_preferences",
+        {
+          p_gamer_id: gamerId,
+          p_preferences: preferencesPayload,
+          p_guest_identifier: guestId || undefined,
+        }
+      );
+
+      if (preferencesError) throw preferencesError;
+
+      if (guestId && avatarUrl) {
+        guestIdentifier.setGamerId(gamerId);
+      }
+
+      set({
+        gamerProfile: {
+          displayName,
+          avatarUrl: avatarUrl || null,
+          bio: bio || null,
+          isComplete: true,
+        },
+        gamerProfileForm: {
+          displayName,
+          avatarUrl,
+          bio,
+        },
+        isGamerProfileModalOpen: false,
+        isSavingGamerProfile: false,
+      });
+    } catch (error) {
+      console.error("Failed to save gamer profile:", error);
+      set({
+        isSavingGamerProfile: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "ไม่สามารถบันทึกโปรไฟล์ผู้เล่นได้",
+      });
+      throw error;
     }
   },
 

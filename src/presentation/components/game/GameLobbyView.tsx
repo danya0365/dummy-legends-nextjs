@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useGameStore } from "@/src/stores/gameStore";
@@ -15,19 +15,32 @@ import {
   RefreshCw,
   Search,
   Filter,
+  UserPlus,
+  CheckCircle,
+  AlertCircle,
+  Edit3,
 } from "lucide-react";
 import type { GameRoom, GameMode } from "@/src/domain/types/game.types";
+import { GamerProfileModal } from "./GamerProfileModal";
 
 export function GameLobbyView() {
   const router = useRouter();
-  const { 
-    availableRooms, 
-    fetchAvailableRooms, 
-    joinRoom, 
+  const {
+    availableRooms,
+    fetchAvailableRooms,
+    joinRoom,
     initializeGamer,
-    isLoading, 
-    error, 
-    clearError 
+    isLoading,
+    error,
+    clearError,
+    isGamerProfileModalOpen,
+    gamerProfileForm,
+    updateGamerProfileForm,
+    closeGamerProfileModal,
+    openGamerProfileModal,
+    saveGamerProfile,
+    isSavingGamerProfile,
+    gamerProfile,
   } = useGameStore();
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -42,6 +55,52 @@ export function GameLobbyView() {
       fetchAvailableRooms();
     });
   }, [initializeGamer, fetchAvailableRooms]);
+
+  const pendingProfileNotice = useMemo(() => {
+    if (isGamerProfileModalOpen) return true;
+    if (!gamerProfile) return true;
+    return !gamerProfile.displayName.trim();
+  }, [isGamerProfileModalOpen, gamerProfile]);
+
+  const profileDisplayName = useMemo(() => {
+    if (gamerProfile?.displayName?.trim()) {
+      return gamerProfile.displayName.trim();
+    }
+
+    if (gamerProfileForm.displayName.trim()) {
+      return gamerProfileForm.displayName.trim();
+    }
+
+    return "ยังไม่มีชื่อผู้เล่น";
+  }, [gamerProfile, gamerProfileForm.displayName]);
+
+  const profileBio = useMemo(() => {
+    if (gamerProfile?.bio?.trim()) {
+      return gamerProfile.bio.trim();
+    }
+
+    if (gamerProfileForm.bio.trim()) {
+      return gamerProfileForm.bio.trim();
+    }
+
+    return "ยังไม่ได้เพิ่มคำอธิบายโปรไฟล์";
+  }, [gamerProfile, gamerProfileForm.bio]);
+
+  const profileAvatarUrl = gamerProfile?.avatarUrl || gamerProfileForm.avatarUrl;
+  const profileInitial = profileDisplayName.charAt(0).toUpperCase() || "?";
+  const profileStatus = gamerProfile?.isComplete
+    ? {
+        label: "พร้อมเล่น",
+        icon: CheckCircle,
+        className:
+          "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+      }
+    : {
+        label: "โปรไฟล์ยังไม่สมบูรณ์",
+        icon: AlertCircle,
+        className:
+          "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+      };
 
   const handleCreateRoom = () => {
     router.push("/game/create-room");
@@ -124,13 +183,30 @@ export function GameLobbyView() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
+            <div className="space-y-3">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
                 🎮 ล็อบบี้เกม
               </h1>
               <p className="mt-2 text-gray-600 dark:text-gray-400">
                 เลือกห้องที่ต้องการเข้าร่วม หรือสร้างห้องใหม่
               </p>
+
+              {pendingProfileNotice && (
+                <div className="flex flex-col gap-2 rounded-xl border border-blue-200 bg-blue-50/80 p-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-900/30 dark:text-blue-200 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-2">
+                    <UserPlus className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <span>
+                      ตั้งค่าโปรไฟล์ผู้เล่นเพื่อให้เพื่อน ๆ รู้จักคุณมากขึ้นก่อนเข้าร่วมการแข่งขัน
+                    </span>
+                  </div>
+                  <button
+                    onClick={openGamerProfileModal}
+                    className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
+                  >
+                    ตั้งค่าโปรไฟล์
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex gap-3">
               <button
@@ -148,6 +224,64 @@ export function GameLobbyView() {
                 <Plus className="h-5 w-5" />
                 สร้างห้อง
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Gamer Profile Card */}
+        <div className="mb-8">
+          <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700/80 dark:bg-gray-900/60">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="relative h-14 w-14 flex-shrink-0">
+                  {profileAvatarUrl ? (
+                    <img
+                      src={profileAvatarUrl}
+                      alt={profileDisplayName}
+                      className="h-14 w-14 rounded-full object-cover ring-2 ring-blue-500/60"
+                    />
+                  ) : (
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-lg font-semibold text-white shadow-lg">
+                      {profileInitial}
+                    </div>
+                  )}
+                  {!gamerProfile?.isComplete && (
+                    <span className="absolute -bottom-1 -right-1 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white shadow">
+                      ละเอียดเพิ่ม
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      {profileDisplayName}
+                    </h2>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${profileStatus.className}`}
+                    >
+                      <profileStatus.icon className="h-3.5 w-3.5" />
+                      {profileStatus.label}
+                    </span>
+                  </div>
+                  <p className="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-400">
+                    {profileBio}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 sm:items-end">
+                <button
+                  onClick={openGamerProfileModal}
+                  className="inline-flex items-center gap-2 rounded-lg border border-blue-500 px-4 py-2 text-sm font-medium text-blue-600 transition hover:bg-blue-50 dark:border-blue-400 dark:text-blue-300 dark:hover:bg-blue-400/10"
+                >
+                  <Edit3 className="h-4 w-4" />
+                  จัดการโปรไฟล์ผู้เล่น
+                </button>
+                {!gamerProfile?.isComplete && (
+                  <p className="text-xs text-amber-600 dark:text-amber-300">
+                    โปรไฟล์เสร็จสมบูรณ์แล้วเพื่อน ๆ จะเห็นชื่อและรูปเท่ ๆ ของคุณในห้องเกม
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -382,6 +516,15 @@ export function GameLobbyView() {
           </Link>
         </div>
       </div>
+
+      <GamerProfileModal
+        isOpen={isGamerProfileModalOpen}
+        formState={gamerProfileForm}
+        isSaving={isSavingGamerProfile}
+        onChange={updateGamerProfileForm}
+        onClose={closeGamerProfileModal}
+        onConfirm={saveGamerProfile}
+      />
     </div>
   );
 }
