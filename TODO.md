@@ -69,8 +69,32 @@ Dummy Legends - แพลตฟอร์มแข่งขันเกมไพ�
 - [x] Mobile responsive
 - [x] Authenticated/Unauthenticated states
 
-## Phase 3: Game Core 🔜
-> ดูรายละเอียดเพิ่มเติมใน `TODO_FEATURES.md`
+## Phase 3: Game Core 🔄
+
+### 3.1 Game Foundation ✅
+- [x] Create game types and interfaces
+- [x] Setup Game Store with Zustand
+- [x] Create mock game data (6 rooms)
+- [x] Room management actions
+- [x] Player management
+- [x] Error handling
+
+### 3.2 Game Lobby System ✅
+- [x] Game Lobby View with room list
+- [x] Search and filter functionality
+- [x] Room cards with details
+- [x] Join room with password support
+- [x] Create room button
+- [x] Refresh functionality
+- [x] Empty state handling
+- [x] Loading states
+
+### 3.3 Room Management 🔄
+- [ ] Create Room page
+- [ ] Join Room by code
+- [ ] Game Room (Waiting Room)
+- [ ] Ready system
+- [ ] Start game (host only)
 
 ## Phase 4: Tournament System 🔜
 > ดูรายละเอียดเพิ่มเติมใน `TODO_FEATURES.md`
@@ -90,11 +114,12 @@ Dummy Legends - แพลตฟอร์มแข่งขันเกมไพ�
 ~~1. MainLayout with Header, Footer, Theme Toggle~~ ✅ เสร็จสิ้น
 ~~2. Landing Page with Master Data และ Mock Data~~ ✅ เสร็จสิ้น
 ~~3. Authentication System (Login, Register, Forgot Password)~~ ✅ เสร็จสิ้น
+~~4. Game Lobby System~~ ✅ เสร็จสิ้น
 
-**Next Steps (Phase 3: Game Core):**
-1. Game Lobby System
-2. Create/Join Room Functionality
-3. Game Room UI with Player List
+**Next Steps (Phase 3: Game Core - ต่อ):**
+1. Create Room Page & Functionality
+2. Game Room (Waiting Room) UI
+3. Ready System & Start Game
 
 ## Notes
 - ✅ = Completed
