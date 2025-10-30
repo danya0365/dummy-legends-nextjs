@@ -126,8 +126,22 @@ Dummy Legends - แพลตฟอร์มแข่งขันเกมไพ�
 - [x] Organizer information
 - [x] Tab navigation (Overview, Participants, Rules)
 
-## Phase 5: Leaderboard System 🔜
-> ดูรายละเอียดเพิ่มเติมใน `TODO_FEATURES.md`
+## Phase 5: Leaderboard System ✅
+
+### 5.1 Leaderboard Foundation ✅
+- [x] Create leaderboard types
+- [x] Setup Leaderboard Store
+- [x] Mock data (100 players)
+- [x] Rankings management
+
+### 5.2 Leaderboard View ✅
+- [x] Top 3 podium display
+- [x] Rankings table (50 players)
+- [x] Period filters (Daily/Weekly/Monthly/All-time)
+- [x] Rank change indicators
+- [x] Player stats display
+- [x] Win streak indicators
+- [x] Stats summary cards
 
 ## Phase 6: Community System 🔜
 > ดูรายละเอียดเพิ่มเติมใน `TODO_FEATURES.md`
@@ -143,11 +157,14 @@ Dummy Legends - แพลตฟอร์มแข่งขันเกมไพ�
 ~~3. Authentication System (Login, Register, Forgot Password)~~ ✅ เสร็จสิ้น
 ~~4. Game Core System (Lobby, Create Room, Waiting Room)~~ ✅ เสร็จสิ้น
 ~~5. Tournament System (Browse, Details, Registration)~~ ✅ เสร็จสิ้น
+~~6. Leaderboard System (Rankings, Statistics)~~ ✅ เสร็จสิ้น
 
-**Next Steps (Phase 5 & Beyond):**
-1. Leaderboard System (Rankings, Statistics, ELO)
-2. Community System (Chat, Friends, Guilds)
-3. Profile System (Stats, Achievements, History)
+**Project Status: 🎉 Core Features Complete!**
+
+**Optional Enhancements:**
+1. Community System (Chat, Friends)
+2. Profile System (Detailed Stats, Achievements)
+3. Admin Dashboard
 
 ## Notes
 - ✅ = Completed
