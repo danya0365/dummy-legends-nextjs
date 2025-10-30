@@ -1,0 +1,1 @@
+-- Initial Schema for Clean Code 1986 Portfolio App
