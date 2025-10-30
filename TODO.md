@@ -99,8 +99,29 @@ Dummy Legends - แพลตฟอร์มแข่งขันเกมไพ�
 - [x] Player list with status
 - [x] Room code sharing
 
-## Phase 4: Tournament System 🔜
-> ดูรายละเอียดเพิ่มเติมใน `TODO_FEATURES.md`
+## Phase 4: Tournament System 🔄
+
+### 4.1 Tournament Foundation ✅
+- [x] Create tournament types and interfaces
+- [x] Setup Tournament Store with Zustand
+- [x] Create mock tournament data (6 tournaments)
+- [x] Registration and check-in actions
+- [x] Bracket management
+
+### 4.2 Tournament List ✅
+- [x] Tournament List View
+- [x] Search functionality
+- [x] Filter by status
+- [x] Featured tournaments section
+- [x] Tournament cards with details
+- [x] Empty state handling
+
+### 4.3 Tournament Details 🔄
+- [ ] Tournament Details Page
+- [ ] Registration system
+- [ ] Participant list
+- [ ] Prize breakdown
+- [ ] Rules display
 
 ## Phase 5: Leaderboard System 🔜
 > ดูรายละเอียดเพิ่มเติมใน `TODO_FEATURES.md`
