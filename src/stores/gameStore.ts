@@ -1,24 +1,155 @@
 "use client";
 
-import { create } from "zustand";
+import type {
+  CreateRoomData,
+  GameRoom,
+  JoinRoomData,
+  Player,
+  RoomDetailsContent,
+  RoomPlayerDetails,
+  GameState as RoomState,
+  RoomStatus,
+} from "@/src/domain/types/game.types";
+import type {
+  GameCard,
+  GameCardRow,
+  GameSession,
+  GameSessionRow,
+  GameStateOtherPlayerSummary,
+  GameStatePayload,
+  OtherPlayer,
+} from "@/src/domain/types/gameplay.types";
 import { supabaseClient as supabase } from "@/src/infrastructure/supabase/client";
 import { guestIdentifier } from "@/src/utils/guestIdentifier";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import type {
-  GameRoom,
-  GameState,
-  CreateRoomData,
-  JoinRoomData,
-  Player,
-  RoomStatus,
-} from "@/src/domain/types/game.types";
+import { create } from "zustand";
 
-interface GameStore extends GameState {
+const isRoomDetailsContent = (value: unknown): value is RoomDetailsContent => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  const room = record.room as Record<string, unknown> | undefined;
+
+  return (
+    !!room &&
+    typeof room.id === "string" &&
+    typeof room.room_code === "string" &&
+    typeof room.host_gamer_id === "string"
+  );
+};
+
+const mapGameSessionRow = (session: GameSessionRow): GameSession => ({
+  id: session.id,
+  roomId: session.room_id,
+  roundNumber: session.round_number,
+  currentTurnGamerId: session.current_turn_gamer_id,
+  currentTurnStartedAt: session.current_turn_started_at,
+  remainingDeckCards: session.remaining_deck_cards,
+  discardPileTopCardId: session.discard_pile_top_card_id,
+  isActive: session.is_active,
+  winnerId: session.winner_gamer_id,
+  winningType: session.winning_type,
+  startedAt: session.started_at ?? new Date().toISOString(),
+  finishedAt: session.finished_at,
+});
+
+const mapGameCardRow = (card: GameCardRow): GameCard => ({
+  id: card.id,
+  suit: card.suit,
+  rank: card.rank,
+  value: card.card_value,
+  location: card.location as GameCard["location"],
+  ownerId: card.owner_gamer_id,
+  position: card.position_in_location ?? 0,
+});
+
+const mapOtherPlayerSummary = (
+  summary: GameStateOtherPlayerSummary
+): OtherPlayer => ({
+  gamerId: summary.gamer_id,
+  cardCount: summary.card_count,
+  isCurrentTurn: summary.is_current_turn,
+});
+
+const parseRoomDetails = (payload: unknown): RoomDetailsContent => {
+  if (!isRoomDetailsContent(payload)) {
+    throw new Error("Invalid room details response");
+  }
+
+  return payload;
+};
+
+const mapRoomPlayer = (player: RoomPlayerDetails): Player => {
+  const gamer = player.gamer;
+  const username =
+    gamer.profile_id ?? gamer.guest_identifier ?? gamer.id ?? "unknown";
+  const displayName =
+    gamer.guest_display_name ??
+    gamer.profile_id ??
+    gamer.guest_identifier ??
+    username;
+
+  return {
+    id: player.id,
+    userId: player.gamer_id,
+    username,
+    displayName,
+    avatar: null,
+    level: gamer.level ?? 1,
+    elo: gamer.elo_rating ?? 0,
+    status: player.status,
+    isHost: player.is_host,
+    isReady: player.is_ready,
+    position: player.position,
+    joinedAt: player.joined_at ?? new Date().toISOString(),
+  };
+};
+
+const mapRoomDetailsToGameRoom = (details: RoomDetailsContent): GameRoom => {
+  const room = details.room;
+  const players = (details.players ?? []).map(mapRoomPlayer);
+  const createdAt = room.created_at ?? new Date().toISOString();
+
+  return {
+    id: room.id,
+    code: room.room_code,
+    hostId: room.host_gamer_id,
+    name: room.room_name,
+    status: room.status,
+    mode: room.mode,
+    settings: {
+      maxPlayers: room.max_players,
+      betAmount: room.bet_amount,
+      timeLimit: room.time_limit_seconds,
+      isPrivate: room.is_private,
+      password: room.room_password ?? undefined,
+      allowSpectators: room.allow_spectators,
+    },
+    players,
+    spectators: [],
+    currentPlayerCount: room.current_player_count ?? players.length,
+    maxPlayerCount: room.max_players,
+    createdAt,
+    startedAt: room.started_at ?? undefined,
+    finishedAt: room.finished_at ?? undefined,
+  };
+};
+
+interface GameStore extends RoomState {
   gamerId: string | null;
   guestId: string | null;
   roomChannel: RealtimeChannel | null;
-  
-  // Actions
+
+  // Game Play State
+  currentSession: GameSession | null;
+  myHand: GameCard[];
+  discardTop: GameCard | null;
+  otherPlayers: OtherPlayer[];
+  gameChannel: RealtimeChannel | null;
+
+  // Actions - Room
   initializeGamer: () => Promise<void>;
   createRoom: (data: CreateRoomData) => Promise<GameRoom>;
   joinRoom: (data: JoinRoomData) => Promise<void>;
@@ -34,6 +165,16 @@ interface GameStore extends GameState {
   updatePlayer: (playerId: string, updates: Partial<Player>) => void;
   setError: (error: string | null) => void;
   clearError: () => void;
+
+  // Actions - Gameplay
+  fetchActiveSessionForRoom: (roomId: string) => Promise<string | null>;
+  startGameSession: () => Promise<string>;
+  loadGameState: (sessionId: string) => Promise<void>;
+  drawCard: (fromDeck: boolean) => Promise<void>;
+  discardCard: (cardId: string) => Promise<void>;
+  subscribeToGameSession: (sessionId: string) => Promise<void>;
+  unsubscribeFromGame: () => void;
+  getActiveSessionForRoom: (roomId: string) => Promise<string | null>;
 }
 
 /**
@@ -41,7 +182,7 @@ interface GameStore extends GameState {
  * Manages game rooms and gameplay state
  */
 export const useGameStore = create<GameStore>((set, get) => ({
-  // Initial State
+  // Initial State - Room
   currentRoom: null,
   availableRooms: [],
   isInRoom: false,
@@ -51,14 +192,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
   guestId: null,
   roomChannel: null,
 
+  // Initial State - Gameplay
+  currentSession: null,
+  myHand: [],
+  discardTop: null,
+  otherPlayers: [],
+  gameChannel: null,
+
   /**
    * Initialize gamer (guest or authenticated)
    */
   initializeGamer: async () => {
     try {
       // Check if authenticated
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       let gamerId: string;
       let guestId: string | null = null;
 
@@ -67,7 +217,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const { data, error } = await supabase.rpc("create_or_get_gamer", {
           p_profile_id: user.user_metadata.profile_id,
         });
-        
+
         if (error) throw error;
         gamerId = data[0].gamer_id;
       } else {
@@ -78,12 +228,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (storedGamerId) {
           gamerId = storedGamerId;
         } else {
-          const displayName = "Guest_" + Math.random().toString(36).substr(2, 6);
+          const displayName =
+            "Guest_" + Math.random().toString(36).substr(2, 6);
           const { data, error } = await supabase.rpc("create_or_get_gamer", {
             p_guest_identifier: guestId,
             p_guest_display_name: displayName,
           });
-          
+
           if (error) throw error;
           gamerId = data[0].gamer_id;
           guestIdentifier.setGamerId(gamerId);
@@ -104,15 +255,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const { gamerId, guestId } = get();
+      const { gamerId } = get();
       if (!gamerId) {
         await get().initializeGamer();
       }
 
+      const resolvedGamerId = get().gamerId!;
+      const resolvedGuestId = get().guestId;
+
       const { data: roomData, error } = await supabase.rpc("create_game_room", {
-        p_gamer_id: get().gamerId!,
+        p_gamer_id: resolvedGamerId,
         p_room_name: data.name,
-        p_guest_identifier: get().guestId || undefined,
+        p_guest_identifier: resolvedGuestId || undefined,
         p_mode: data.mode,
         p_max_players: data.maxPlayers,
         p_bet_amount: data.betAmount,
@@ -136,27 +290,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (detailsError) throw detailsError;
       if (!roomDetails) throw new Error("Failed to fetch room details");
 
-      const details = roomDetails as Record<string, any>;
+      const details = parseRoomDetails(roomDetails);
+      const baseRoom = mapRoomDetailsToGameRoom(details);
       const newRoom: GameRoom = {
-        id: roomId,
+        ...baseRoom,
         code: roomCode,
-        hostId: get().gamerId!,
-        name: data.name,
-        status: "waiting",
-        mode: data.mode,
+        hostId: resolvedGamerId,
+        name: data.name || baseRoom.name,
         settings: {
-          maxPlayers: data.maxPlayers,
-          betAmount: data.betAmount,
-          timeLimit: data.timeLimit,
-          isPrivate: data.isPrivate,
-          password: data.password,
-          allowSpectators: data.allowSpectators,
+          ...baseRoom.settings,
+          password: data.password ?? baseRoom.settings.password,
+          allowSpectators:
+            data.allowSpectators ?? baseRoom.settings.allowSpectators,
         },
-        players: details.players || [],
-        spectators: [],
-        currentPlayerCount: 1,
-        maxPlayerCount: data.maxPlayers,
-        createdAt: new Date().toISOString(),
+        currentPlayerCount: baseRoom.currentPlayerCount ?? 1,
       };
 
       set({
@@ -185,14 +332,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const { gamerId, guestId } = get();
+      const { gamerId } = get();
       if (!gamerId) {
         await get().initializeGamer();
       }
 
+      const resolvedGamerId = get().gamerId!;
+      const resolvedGuestId = get().guestId;
+
       const { data: roomId, error } = await supabase.rpc("join_game_room", {
-        p_gamer_id: get().gamerId!,
-        p_guest_identifier: get().guestId || undefined,
+        p_gamer_id: resolvedGamerId,
+        p_guest_identifier: resolvedGuestId || undefined,
         p_room_code: data.roomCode || undefined,
         p_room_id: data.roomId || undefined,
         p_room_password: data.password || undefined,
@@ -210,36 +360,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (detailsError) throw detailsError;
       if (!roomDetails) throw new Error("Failed to fetch room details");
 
-      const details = roomDetails as Record<string, any>;
-      const room: GameRoom = {
-        id: details.room.id,
-        code: details.room.room_code,
-        hostId: details.room.host_gamer_id,
-        name: details.room.room_name,
-        status: details.room.status,
-        mode: details.room.mode,
-        settings: {
-          maxPlayers: details.room.max_players,
-          betAmount: details.room.bet_amount,
-          timeLimit: details.room.time_limit_seconds,
-          isPrivate: details.room.is_private,
-          allowSpectators: details.room.allow_spectators,
-        },
-        players: details.players || [],
-        spectators: [],
-        currentPlayerCount: details.room.current_player_count,
-        maxPlayerCount: details.room.max_players,
-        createdAt: details.room.created_at,
-      };
+      const details = parseRoomDetails(roomDetails);
+      const room = mapRoomDetailsToGameRoom(details);
 
       set({
         currentRoom: room,
         isInRoom: true,
-        isLoading: false,
       });
 
       // Subscribe to room updates
       await get().subscribeToRoom(roomId);
+
+      if (room.status === "playing") {
+        const sessionId = await get().fetchActiveSessionForRoom(room.id);
+        if (sessionId) {
+          get().unsubscribeFromGame();
+          await get().loadGameState(sessionId);
+          await get().subscribeToGameSession(sessionId);
+        }
+      }
+
+      set({ isLoading: false });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "เข้าร่วมห้องไม่สำเร็จ",
@@ -316,27 +457,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   /**
-   * Start game (host only)
+   * Start game (host only) - just validates, actual start is in startGameSession
    */
   startGame: async () => {
-    set({ isLoading: true, error: null });
+    set({ error: null });
 
     try {
-      const currentRoom = get().currentRoom;
-      if (!currentRoom) {
+      const { currentRoom, gamerId } = get();
+      if (!currentRoom || !gamerId) {
         throw new Error("ไม่พบห้องเกม");
       }
 
-      const userId = "user-001"; // TODO: Get from auth store
-      const isHost = currentRoom.players.find((p) => p.userId === userId)?.isHost;
+      if (currentRoom.status === "playing") {
+        throw new Error("เกมได้เริ่มไปแล้ว");
+      }
+
+      const isHost = currentRoom.players.find(
+        (p) => p.userId === gamerId
+      )?.isHost;
 
       if (!isHost) {
         throw new Error("เฉพาะเจ้าของห้องเท่านั้นที่สามารถเริ่มเกมได้");
       }
 
-      const allReady = currentRoom.players.every(
-        (p) => p.isReady || p.isHost
-      );
+      const allReady = currentRoom.players.every((p) => p.isReady || p.isHost);
 
       if (!allReady) {
         throw new Error("ผู้เล่นบางคนยังไม่พร้อม");
@@ -345,25 +489,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (currentRoom.currentPlayerCount < 2) {
         throw new Error("ต้องมีผู้เล่นอย่างน้อย 2 คน");
       }
-
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      set({
-        currentRoom: {
-          ...currentRoom,
-          status: "playing",
-          startedAt: new Date().toISOString(),
-        },
-        isLoading: false,
-      });
     } catch (error) {
       set({
         error:
           error instanceof Error
             ? error.message
             : "เริ่มเกมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
-        isLoading: false,
       });
       throw error;
     }
@@ -383,7 +514,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       if (error) throw error;
 
-      const mappedRooms: GameRoom[] = (rooms || []).map((room: any) => ({
+      const mappedRooms: GameRoom[] = (rooms || []).map((room) => ({
         id: room.id,
         code: room.room_code,
         hostId: room.host_gamer_id,
@@ -499,6 +630,52 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   /**
+   * Fetch active session ID for a room
+   */
+  fetchActiveSessionForRoom: async (roomId: string) => {
+    try {
+      const { gamerId } = get();
+      if (!gamerId) {
+        await get().initializeGamer();
+      }
+
+      const resolvedGamerId = get().gamerId!;
+      const resolvedGuestId = get().guestId;
+
+      const { data: sessionId, error } = await supabase.rpc(
+        "get_active_session_for_room",
+        {
+          p_room_id: roomId,
+          p_gamer_id: resolvedGamerId,
+          p_guest_identifier: resolvedGuestId || undefined,
+        }
+      );
+
+      if (error) throw error;
+      if (!sessionId) {
+        return null;
+      }
+
+      return sessionId;
+    } catch (error) {
+      console.error("Failed to fetch active session:", error);
+      return null;
+    }
+  },
+
+  /**
+   * Get cached or remote active session for current room
+   */
+  getActiveSessionForRoom: async (roomId: string) => {
+    const { currentSession } = get();
+    if (currentSession && currentSession.roomId === roomId && currentSession.isActive) {
+      return currentSession.id;
+    }
+
+    return get().fetchActiveSessionForRoom(roomId);
+  },
+
+  /**
    * Subscribe to room updates via Realtime
    */
   subscribeToRoom: async (roomId: string) => {
@@ -543,6 +720,207 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (roomChannel) {
       supabase.removeChannel(roomChannel);
       set({ roomChannel: null });
+    }
+  },
+
+  // =====================================================
+  // GAMEPLAY ACTIONS
+  // =====================================================
+
+  /**
+   * Start game session (called after all players ready)
+   */
+  startGameSession: async () => {
+    try {
+      const { currentRoom, gamerId, guestId } = get();
+      if (!currentRoom || !gamerId) {
+        throw new Error("ไม่พบห้องเกม");
+      }
+
+      set({ isLoading: true });
+
+      const { data: sessionId, error } = await supabase.rpc(
+        "start_game_session",
+        {
+          p_room_id: currentRoom.id,
+          p_host_gamer_id: gamerId,
+          p_guest_identifier: guestId || undefined,
+        }
+      );
+
+      if (error) throw error;
+      if (!sessionId) throw new Error("Failed to start session");
+
+      // Load initial game state
+      await get().loadGameState(sessionId);
+
+      // Subscribe to game updates
+      get().unsubscribeFromGame();
+      await get().subscribeToGameSession(sessionId);
+
+      set(({ currentRoom: latestRoom }) => ({
+        currentRoom:
+          latestRoom && latestRoom.id === currentRoom.id
+            ? {
+                ...latestRoom,
+                status: "playing",
+                startedAt: new Date().toISOString(),
+              }
+            : latestRoom,
+        isLoading: false,
+      }));
+
+      return sessionId;
+    } catch (error) {
+      console.error("Failed to start game session:", error);
+      set({ error: "ไม่สามารถเริ่มเกมได้", isLoading: false });
+      throw error;
+    }
+  },
+
+  /**
+   * Load current game state
+   */
+  loadGameState: async (sessionId: string) => {
+    try {
+      const { gamerId, guestId } = get();
+      if (!gamerId) throw new Error("ไม่พบผู้เล่น");
+
+      const { data, error } = await supabase.rpc("get_game_state", {
+        p_session_id: sessionId,
+        p_gamer_id: gamerId,
+        p_guest_identifier: guestId || undefined,
+      });
+
+      if (error) throw error;
+      if (!data) throw new Error("Failed to load game state");
+
+      const payload = data as unknown as GameStatePayload;
+      const session = payload.session
+        ? mapGameSessionRow(payload.session)
+        : null;
+      const myHand = (payload.my_hand ?? []).map(mapGameCardRow);
+      const discardTop = payload.discard_top
+        ? mapGameCardRow(payload.discard_top)
+        : null;
+      const otherPlayers = (payload.other_players ?? []).map(
+        mapOtherPlayerSummary
+      );
+
+      set({
+        currentSession: session,
+        myHand,
+        discardTop,
+        otherPlayers,
+      });
+    } catch (error) {
+      console.error("Failed to load game state:", error);
+      set({ error: "ไม่สามารถโหลดสถานะเกมได้" });
+      throw error;
+    }
+  },
+
+  /**
+   * Draw a card
+   */
+  drawCard: async (fromDeck: boolean) => {
+    try {
+      const { currentSession, gamerId, guestId } = get();
+      if (!currentSession || !gamerId) throw new Error("ไม่พบเซสชันเกม");
+
+      const { error } = await supabase.rpc("draw_card", {
+        p_session_id: currentSession.id,
+        p_gamer_id: gamerId,
+        p_from_deck: fromDeck,
+        p_guest_identifier: guestId || undefined,
+      });
+
+      if (error) throw error;
+
+      // Reload game state
+      await get().loadGameState(currentSession.id);
+    } catch (error) {
+      console.error("Failed to draw card:", error);
+      set({
+        error: error instanceof Error ? error.message : "ไม่สามารถจั่วไพ่ได้",
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Discard a card
+   */
+  discardCard: async (cardId: string) => {
+    try {
+      const { currentSession, gamerId, guestId } = get();
+      if (!currentSession || !gamerId) throw new Error("ไม่พบเซสชันเกม");
+
+      const { error } = await supabase.rpc("discard_card", {
+        p_session_id: currentSession.id,
+        p_gamer_id: gamerId,
+        p_card_id: cardId,
+        p_guest_identifier: guestId || undefined,
+      });
+
+      if (error) throw error;
+
+      // Reload game state
+      await get().loadGameState(currentSession.id);
+    } catch (error) {
+      console.error("Failed to discard card:", error);
+      set({
+        error: error instanceof Error ? error.message : "ไม่สามารถทิ้งไพ่ได้",
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Subscribe to game session updates
+   */
+  subscribeToGameSession: async (sessionId: string) => {
+    const channel = supabase
+      .channel(`game:${sessionId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_cards",
+          filter: `session_id=eq.${sessionId}`,
+        },
+        () => {
+          // Reload game state when cards change
+          get().loadGameState(sessionId);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "game_sessions",
+          filter: `id=eq.${sessionId}`,
+        },
+        () => {
+          // Reload game state when session updates
+          get().loadGameState(sessionId);
+        }
+      )
+      .subscribe();
+
+    set({ gameChannel: channel });
+  },
+
+  /**
+   * Unsubscribe from game session
+   */
+  unsubscribeFromGame: () => {
+    const { gameChannel } = get();
+    if (gameChannel) {
+      supabase.removeChannel(gameChannel);
+      set({ gameChannel: null });
     }
   },
 }));

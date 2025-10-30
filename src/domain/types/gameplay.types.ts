@@ -1,0 +1,91 @@
+/**
+ * Gameplay Types for Dummy Legends
+ */
+
+import type { Database } from "@/src/domain/types/supabase";
+
+export type CardSuit = "hearts" | "diamonds" | "clubs" | "spades";
+export type CardRank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K";
+
+export interface GameCard {
+  id: string;
+  suit: CardSuit;
+  rank: CardRank;
+  value: number;
+  location: "deck" | "discard" | "hand" | "meld";
+  ownerId: string | null;
+  position: number;
+}
+
+export interface GameSession {
+  id: string;
+  roomId: string;
+  roundNumber: number;
+  currentTurnGamerId: string | null;
+  currentTurnStartedAt: string | null;
+  remainingDeckCards: number;
+  discardPileTopCardId: string | null;
+  isActive: boolean;
+  winnerId: string | null;
+  winningType: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface PlayerHand {
+  gamerId: string;
+  cardCount: number;
+  deadwoodCount: number;
+  deadwoodValue: number;
+  melds: Meld[];
+}
+
+export interface Meld {
+  type: "set" | "run";
+  cards: string[]; // card IDs
+}
+
+export interface OtherPlayer {
+  gamerId: string;
+  cardCount: number;
+  isCurrentTurn: boolean;
+  displayName?: string;
+  avatar?: string | null;
+}
+
+export interface GameState {
+  session: GameSession | null;
+  myHand: GameCard[];
+  discardTop: GameCard | null;
+  otherPlayers: OtherPlayer[];
+  isMyTurn: boolean;
+  canDraw: boolean;
+  mustDiscard: boolean;
+}
+
+export type GameSessionRow = Database["public"]["Tables"]["game_sessions"]["Row"];
+export type GameCardRow = Database["public"]["Tables"]["game_cards"]["Row"];
+
+export interface GameStateOtherPlayerSummary {
+  gamer_id: string;
+  card_count: number;
+  is_current_turn: boolean;
+}
+
+export interface GameStatePayload {
+  session: GameSessionRow | null;
+  my_hand: GameCardRow[] | null;
+  discard_top: GameCardRow | null;
+  other_players: GameStateOtherPlayerSummary[] | null;
+}
+
+export interface GameMove {
+  id: string;
+  sessionId: string;
+  gamerId: string;
+  moveType: "draw" | "discard" | "meld" | "knock" | "gin";
+  moveNumber: number;
+  moveData: Record<string, unknown>;
+  timeTakenSeconds: number | null;
+  createdAt: string;
+}

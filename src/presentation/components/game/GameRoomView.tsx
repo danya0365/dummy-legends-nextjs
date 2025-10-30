@@ -1,24 +1,23 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useGameStore } from "@/src/stores/gameStore";
 import {
-  Users,
-  Clock,
-  Lock,
-  Eye,
-  Coins,
-  Trophy,
-  Copy,
-  Check,
   AlertCircle,
   ArrowLeft,
+  Check,
+  Clock,
+  Coins,
+  Copy,
+  Eye,
+  Lock,
   LogOut,
   Play,
+  Trophy,
+  Users,
 } from "lucide-react";
-import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 interface GameRoomViewProps {
   roomId: string;
@@ -28,24 +27,29 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
   const router = useRouter();
   const {
     currentRoom,
+    currentSession,
     gamerId,
     initializeGamer,
     joinRoom,
     leaveRoom,
     toggleReady,
     startGame,
+    startGameSession,
+    getActiveSessionForRoom,
+    loadGameState,
     isLoading,
     error,
     clearError,
   } = useGameStore();
 
   const [copied, setCopied] = useState(false);
+  const [resumeLoading, setResumeLoading] = useState(false);
 
   useEffect(() => {
     const initialize = async () => {
       // Initialize gamer first
       await initializeGamer();
-      
+
       // If not in room, join by roomId
       if (!currentRoom) {
         try {
@@ -56,7 +60,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
         }
       }
     };
-    
+
     initialize();
   }, [_roomId, currentRoom, initializeGamer, joinRoom, router]);
 
@@ -80,8 +84,10 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
   const handleStartGame = async () => {
     try {
       await startGame();
-      // In real app, would navigate to game play page
-      alert("เริ่มเกม! (จะพัฒนาหน้าเล่นเกมในขั้นตอนถัดไป)");
+      // Start actual game session
+      const sessionId = await startGameSession();
+      // Navigate to game play page
+      router.push(`/game/play/${sessionId}`);
     } catch (error) {
       console.error("Start game error:", error);
     }
@@ -89,8 +95,41 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
 
   const isHost = currentRoom?.players.find((p) => p.userId === gamerId)?.isHost;
   const currentPlayer = currentRoom?.players.find((p) => p.userId === gamerId);
-  const allPlayersReady = currentRoom?.players.every((p) => p.isReady || p.isHost);
-  const canStartGame = isHost && allPlayersReady && currentRoom && currentRoom.currentPlayerCount >= 2;
+  const allPlayersReady = currentRoom?.players.every(
+    (p) => p.isReady || p.isHost
+  );
+  const canStartGame =
+    isHost &&
+    allPlayersReady &&
+    currentRoom &&
+    currentRoom.currentPlayerCount >= 2;
+  const isGamePlaying = currentRoom?.status === "playing";
+
+  const handleResumeGame = async () => {
+    if (!currentRoom) return;
+
+    try {
+      setResumeLoading(true);
+      let sessionId: string | null = currentSession?.id ?? null;
+
+      if (!sessionId) {
+        sessionId = await getActiveSessionForRoom(currentRoom.id);
+        if (sessionId) {
+          await loadGameState(sessionId);
+        }
+      }
+
+      if (!sessionId) {
+        throw new Error("ไม่พบเกมที่กำลังเล่นอยู่");
+      }
+
+      router.push(`/game/play/${sessionId}`);
+    } catch (error) {
+      console.error("Resume game error:", error);
+    } finally {
+      setResumeLoading(false);
+    }
+  };
 
   if (!currentRoom) {
     return (
@@ -103,6 +142,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
     );
   }
 
+  console.log("currentRoom.players", currentRoom?.players);
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto">
@@ -125,7 +165,10 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                   onClick={handleCopyCode}
                   className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
                 >
-                  รหัสห้อง: <span className="font-mono font-bold">{currentRoom.code}</span>
+                  รหัสห้อง:{" "}
+                  <span className="font-mono font-bold">
+                    {currentRoom.code}
+                  </span>
                   {copied ? (
                     <Check className="h-4 w-4 text-green-500" />
                   ) : (
@@ -136,6 +179,12 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                   <span className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
                     <Lock className="h-4 w-4" />
                     ห้องส่วนตัว
+                  </span>
+                )}
+                {isGamePlaying && (
+                  <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
+                    <Play className="h-4 w-4" />
+                    เกมกำลังดำเนินอยู่
                   </span>
                 )}
               </div>
@@ -177,28 +226,37 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <Users className="h-5 w-5 mx-auto mb-1 text-gray-600 dark:text-gray-400" />
-                  <div className="text-sm text-gray-600 dark:text-gray-400">ผู้เล่น</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    ผู้เล่น
+                  </div>
                   <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                    {currentRoom.currentPlayerCount}/{currentRoom.maxPlayerCount}
+                    {currentRoom.currentPlayerCount}/
+                    {currentRoom.maxPlayerCount}
                   </div>
                 </div>
                 <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <Coins className="h-5 w-5 mx-auto mb-1 text-yellow-500" />
-                  <div className="text-sm text-gray-600 dark:text-gray-400">เดิมพัน</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    เดิมพัน
+                  </div>
                   <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
                     ฿{currentRoom.settings.betAmount}
                   </div>
                 </div>
                 <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <Clock className="h-5 w-5 mx-auto mb-1 text-gray-600 dark:text-gray-400" />
-                  <div className="text-sm text-gray-600 dark:text-gray-400">เวลา/รอบ</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    เวลา/รอบ
+                  </div>
                   <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
                     {currentRoom.settings.timeLimit}วิ
                   </div>
                 </div>
                 <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <Eye className="h-5 w-5 mx-auto mb-1 text-gray-600 dark:text-gray-400" />
-                  <div className="text-sm text-gray-600 dark:text-gray-400">ผู้ชม</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    ผู้ชม
+                  </div>
                   <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
                     {currentRoom.settings.allowSpectators ? "เปิด" : "ปิด"}
                   </div>
@@ -263,7 +321,9 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                           พร้อม
                         </span>
                       ) : player.isHost ? (
-                        <span className="text-gray-400 dark:text-gray-500 text-sm">รอผู้เล่น</span>
+                        <span className="text-gray-400 dark:text-gray-500 text-sm">
+                          รอผู้เล่น
+                        </span>
                       ) : (
                         <span className="text-yellow-600 dark:text-yellow-400 text-sm">
                           กำลังเตรียมตัว...
@@ -275,7 +335,8 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
 
                 {/* Empty Slots */}
                 {Array.from({
-                  length: currentRoom.maxPlayerCount - currentRoom.currentPlayerCount,
+                  length:
+                    currentRoom.maxPlayerCount - currentRoom.currentPlayerCount,
                 }).map((_, idx) => (
                   <div
                     key={`empty-${idx}`}
@@ -293,7 +354,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
           {/* Right Column - Actions */}
           <div className="space-y-6">
             {/* Ready Button */}
-            {!isHost && (
+            {!isHost && !isGamePlaying && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
                   สถานะของคุณ
@@ -313,7 +374,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
             )}
 
             {/* Start Game Button (Host Only) */}
-            {isHost && (
+            {isHost && !isGamePlaying && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
                   การควบคุมเกม
@@ -338,6 +399,42 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                 )}
               </div>
             )}
+            {isHost && isGamePlaying && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  เกมกำลังดำเนินอยู่
+                </h3>
+                <button
+                  onClick={handleResumeGame}
+                  disabled={resumeLoading}
+                  className="w-full flex items-center justify-center gap-2 py-4 rounded-lg font-semibold text-lg bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Play className="h-6 w-6" />
+                  {resumeLoading ? "กำลังโหลดเกม..." : "ไปต่อที่เกม"}
+                </button>
+                <p className="mt-3 text-xs text-center text-gray-500 dark:text-gray-400">
+                  เกมถูกเริ่มไปแล้ว คุณสามารถกลับเข้าสู่เกมได้ทุกเมื่อ
+                </p>
+              </div>
+            )}
+            {!isHost && isGamePlaying && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  เกมกำลังดำเนินอยู่
+                </h3>
+                <button
+                  onClick={handleResumeGame}
+                  disabled={resumeLoading}
+                  className="w-full flex items-center justify-center gap-2 py-4 rounded-lg font-semibold text-lg bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Play className="h-6 w-6" />
+                  {resumeLoading ? "กำลังโหลดเกม..." : "เข้าเกม"}
+                </button>
+                <p className="mt-3 text-xs text-center text-gray-500 dark:text-gray-400">
+                  เกมกำลังดำเนินอยู่ กดเพื่อกลับเข้าสู่เกม
+                </p>
+              </div>
+            )}
 
             {/* Room Info */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
@@ -358,13 +455,17 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">สถานะ</span>
+                  <span className="text-gray-600 dark:text-gray-400">
+                    สถานะ
+                  </span>
                   <span className="font-medium text-yellow-600 dark:text-yellow-400">
                     รอผู้เล่น
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">ผู้ชม</span>
+                  <span className="text-gray-600 dark:text-gray-400">
+                    ผู้ชม
+                  </span>
                   <span className="font-medium text-gray-900 dark:text-gray-100">
                     {currentRoom.spectators.length} คน
                   </span>

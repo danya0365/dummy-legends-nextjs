@@ -1,10 +1,12 @@
+import type { Database } from "@/src/domain/types/supabase";
+
 /**
  * Game Types for Dummy Legends
  */
 
-export type RoomStatus = "waiting" | "ready" | "playing" | "finished";
-export type PlayerStatus = "waiting" | "ready" | "playing" | "disconnected";
-export type GameMode = "casual" | "ranked" | "tournament" | "private";
+export type RoomStatus = Database["public"]["Enums"]["room_status"];
+export type PlayerStatus = Database["public"]["Enums"]["player_status"];
+export type GameMode = Database["public"]["Enums"]["game_mode"];
 
 export interface Player {
   id: string;
@@ -20,6 +22,21 @@ export interface Player {
   position: number; // 0-3 for 4 players max
   joinedAt: string;
 }
+
+export type RoomPlayerGamer = Database["public"]["Tables"]["gamers"]["Row"];
+
+export type RoomPlayerDetails = Database["public"]["Tables"]["room_players"]["Row"] & {
+  gamer: RoomPlayerGamer;
+};
+
+export type RoomDetailsRoom = Database["public"]["Tables"]["game_rooms"]["Row"];
+
+export interface RoomDetailsContent {
+  room: RoomDetailsRoom;
+  players: RoomPlayerDetails[] | null;
+}
+
+export type RoomDetailsResponse = RoomDetailsContent | null;
 
 export interface RoomSettings {
   maxPlayers: number; // 2-4 players
@@ -73,7 +90,7 @@ export interface GameState {
 }
 
 // Dummy Card Game Types
-export type CardSuit = "hearts" | "diamonds" | "clubs" | "spades";
+export type CardSuit = Database["public"]["Enums"]["card_suit"];
 export type CardRank =
   | "A"
   | "2"

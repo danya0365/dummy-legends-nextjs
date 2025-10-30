@@ -732,6 +732,24 @@ export type Database = {
         Args: { username: string; full_name?: string; avatar_url?: string }
         Returns: string
       }
+      discard_card: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_card_id: string
+          p_guest_identifier?: string
+        }
+        Returns: boolean
+      }
+      draw_card: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_from_deck?: boolean
+          p_guest_identifier?: string
+        }
+        Returns: string
+      }
       generate_room_code: {
         Args: Record<PropertyKey, never>
         Returns: string
@@ -768,6 +786,14 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Database["public"]["Enums"]["profile_role"]
       }
+      get_active_session_for_room: {
+        Args: {
+          p_room_id: string
+          p_gamer_id: string
+          p_guest_identifier?: string
+        }
+        Returns: string
+      }
       get_auth_user_by_id: {
         Args: { p_id: string }
         Returns: Json
@@ -794,6 +820,14 @@ export type Database = {
       get_card_value: {
         Args: { p_rank: Database["public"]["Enums"]["card_rank"] }
         Returns: number
+      }
+      get_game_state: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_guest_identifier?: string
+        }
+        Returns: Json
       }
       get_paginated_users: {
         Args: { p_page?: number; p_limit?: number }
@@ -879,6 +913,14 @@ export type Database = {
           new_role: Database["public"]["Enums"]["profile_role"]
         }
         Returns: boolean
+      }
+      start_game_session: {
+        Args: {
+          p_room_id: string
+          p_host_gamer_id: string
+          p_guest_identifier?: string
+        }
+        Returns: string
       }
       toggle_ready_status: {
         Args: {

@@ -222,6 +222,11 @@ BEGIN
   IF v_room_id IS NULL THEN
     RAISE EXCEPTION 'Room not found';
   END IF;
+
+  -- Check if already in room
+  IF EXISTS (SELECT 1 FROM public.room_players WHERE room_id = v_room_id AND gamer_id = p_gamer_id) THEN
+    RETURN v_room_id;
+  END IF;
   
   IF v_room_status NOT IN ('waiting', 'ready') THEN
     RAISE EXCEPTION 'Room is not accepting players';
@@ -233,11 +238,6 @@ BEGIN
   
   IF v_is_private AND v_room_password != p_room_password THEN
     RAISE EXCEPTION 'Invalid password';
-  END IF;
-  
-  -- Check if already in room
-  IF EXISTS (SELECT 1 FROM public.room_players WHERE room_id = v_room_id AND gamer_id = p_gamer_id) THEN
-    RETURN v_room_id;
   END IF;
   
   -- Find next position
