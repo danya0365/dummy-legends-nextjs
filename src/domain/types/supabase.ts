@@ -387,6 +387,14 @@ export type Database = {
         Args: { username: string; full_name?: string; avatar_url?: string }
         Returns: string
       }
+      discard_card: {
+        Args: { p_room_id: string; p_card: Json }
+        Returns: Json
+      }
+      draw_card: {
+        Args: { p_room_id: string; p_from_discard?: boolean }
+        Returns: Json
+      }
       generate_room_code: {
         Args: Record<PropertyKey, never>
         Returns: string
@@ -470,6 +478,10 @@ export type Database = {
           verification_status: string
         }[]
       }
+      initialize_game_state: {
+        Args: { p_room_id: string }
+        Returns: Json
+      }
       is_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
@@ -486,8 +498,16 @@ export type Database = {
         Args: { p_room_id?: string; p_room_code?: string; p_password?: string }
         Returns: Json
       }
+      knock: {
+        Args: { p_room_id: string; p_deadwood_value: number }
+        Returns: Json
+      }
       leave_game_room: {
         Args: { p_room_id: string }
+        Returns: Json
+      }
+      meld_cards: {
+        Args: { p_room_id: string; p_cards: Json }
         Returns: Json
       }
       migrate_profile_roles: {
@@ -511,6 +531,17 @@ export type Database = {
       }
       toggle_ready_status: {
         Args: { p_room_id: string }
+        Returns: Json
+      }
+      update_game_state: {
+        Args: {
+          p_room_id: string
+          p_deck?: Json
+          p_discard_pile?: Json
+          p_player_hands?: Json
+          p_player_melds?: Json
+          p_scores?: Json
+        }
         Returns: Json
       }
     }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useGameStore } from "@/src/stores/gameStore";
 import { useAuthStore } from "@/src/stores/authStore";
+import { GameBoard } from "./GameBoard";
 import {
   Users,
   Clock,
@@ -33,6 +34,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
     leaveRoom,
     toggleReady,
     startGame,
+    initializeGame,
     isLoading,
     error,
     clearError,
@@ -74,8 +76,8 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
   const handleStartGame = async () => {
     try {
       await startGame();
-      // In real app, would navigate to game play page
-      alert("เริ่มเกม! (จะพัฒนาหน้าเล่นเกมในขั้นตอนถัดไป)");
+      // Initialize game (deal cards)
+      await initializeGame();
     } catch (error) {
       console.error("Start game error:", error);
     }
@@ -97,6 +99,33 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
     );
   }
 
+  // Show game board if game is playing
+  if (currentRoom.status === "playing") {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-6 flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              {currentRoom.name}
+            </h1>
+            <button
+              onClick={handleLeaveRoom}
+              className="flex items-center gap-2 px-4 py-2 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              <LogOut className="h-5 w-5" />
+              ออกจากเกม
+            </button>
+          </div>
+          
+          {/* Game Board */}
+          <GameBoard />
+        </div>
+      </div>
+    );
+  }
+
+  // Show waiting room
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto">

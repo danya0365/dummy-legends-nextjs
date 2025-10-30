@@ -8,15 +8,27 @@ import type {
   JoinRoomData,
   Player,
   RoomStatus,
+  Card,
+  GamePlayState,
 } from "@/src/domain/types/game.types";
 import { gameRepository } from "@/src/infrastructure/supabase/gameRepository";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import {
+  generateDeck,
+  dealCards,
+  sortCards,
+} from "@/src/utils/cardUtils";
 
 interface GameStore extends GameState {
   // Realtime subscription
   roomSubscription: RealtimeChannel | null;
   
-  // Actions
+  // Gameplay state
+  gamePlayState: GamePlayState | null;
+  myHand: Card[];
+  selectedCards: Card[];
+  
+  // Room Actions
   createRoom: (data: CreateRoomData) => Promise<GameRoom>;
   joinRoom: (data: JoinRoomData) => Promise<void>;
   leaveRoom: () => void;
@@ -31,6 +43,16 @@ interface GameStore extends GameState {
   clearError: () => void;
   subscribeToRoom: (roomId: string) => void;
   unsubscribeFromRoom: () => void;
+  
+  // Gameplay Actions
+  initializeGame: () => Promise<void>;
+  drawCard: (fromDiscard?: boolean) => Promise<void>;
+  discardCard: (card: Card) => Promise<void>;
+  selectCard: (card: Card) => void;
+  deselectCard: (card: Card) => void;
+  clearSelection: () => void;
+  meldCards: (cards: Card[]) => Promise<void>;
+  knock: (deadwoodValue: number) => Promise<void>;
 }
 
 /**
@@ -45,6 +67,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isLoading: false,
   error: null,
   roomSubscription: null,
+  
+  // Gameplay State
+  gamePlayState: null,
+  myHand: [],
+  selectedCards: [],
 
   /**
    * Create a new game room
@@ -348,6 +375,202 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (subscription) {
       gameRepository.unsubscribeFromRoom(subscription);
       set({ roomSubscription: null });
+    }
+  },
+
+  /**
+   * Initialize game - deal cards and set up game state
+   */
+  initializeGame: async () => {
+    const currentRoom = get().currentRoom;
+    if (!currentRoom) {
+      throw new Error("ไม่พบห้องเกม");
+    }
+
+    set({ isLoading: true, error: null });
+
+    try {
+      // Generate and shuffle deck
+      const deck = generateDeck();
+      const { playerHands, remainingDeck } = dealCards(
+        deck,
+        currentRoom.currentPlayerCount
+      );
+
+      // Build player hands object
+      const playerHandsObj: Record<string, Card[]> = {};
+      currentRoom.players.forEach((player, index) => {
+        playerHandsObj[player.userId] = sortCards(playerHands[index]);
+      });
+
+      // Initialize game state
+      await gameRepository.initializeGameState(currentRoom.id);
+
+      // Update with card data
+      await gameRepository.updateGameState({
+        roomId: currentRoom.id,
+        deck: remainingDeck,
+        discardPile: [],
+        playerHands: playerHandsObj,
+        playerMelds: {},
+        scores: {},
+      });
+
+      // Set local game state
+      const firstPlayer = currentRoom.players[0];
+      const gamePlayState: GamePlayState = {
+        roomId: currentRoom.id,
+        deck: remainingDeck,
+        discardPile: [],
+        playerHands: currentRoom.players.map((player, index) => ({
+          playerId: player.userId,
+          cards: playerHands[index],
+          melds: [],
+        })),
+        currentTurn: firstPlayer.userId,
+        turnStartTime: new Date().toISOString(),
+        round: 1,
+        scores: {},
+      };
+
+      // Get my hand (if authenticated user is in the game)
+      // TODO: Get from auth store
+      const myUserId = firstPlayer.userId; // Temporary
+      const myHand = playerHandsObj[myUserId] || [];
+
+      set({
+        gamePlayState,
+        myHand: sortCards(myHand),
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        error:
+          error instanceof Error
+            ? error.message
+            : "เริ่มเกมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+        isLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Draw a card from deck or discard pile
+   */
+  drawCard: async (fromDiscard: boolean = false) => {
+    const currentRoom = get().currentRoom;
+    if (!currentRoom) return;
+
+    try {
+      const result = await gameRepository.drawCard(currentRoom.id, fromDiscard);
+      
+      // Add drawn card to my hand
+      const drawnCard = result.card;
+      const myHand = get().myHand;
+      
+      set({
+        myHand: sortCards([...myHand, drawnCard]),
+      });
+    } catch (error) {
+      set({
+        error:
+          error instanceof Error ? error.message : "จั่วไพ่ไม่สำเร็จ",
+      });
+    }
+  },
+
+  /**
+   * Discard a card
+   */
+  discardCard: async (card: Card) => {
+    const currentRoom = get().currentRoom;
+    if (!currentRoom) return;
+
+    try {
+      await gameRepository.discardCard(currentRoom.id, card);
+      
+      // Remove card from my hand
+      const myHand = get().myHand;
+      set({
+        myHand: myHand.filter((c) => c.id !== card.id),
+        selectedCards: [],
+      });
+    } catch (error) {
+      set({
+        error:
+          error instanceof Error ? error.message : "ทิ้งไพ่ไม่สำเร็จ",
+      });
+    }
+  },
+
+  /**
+   * Select a card
+   */
+  selectCard: (card: Card) => {
+    const selectedCards = get().selectedCards;
+    set({
+      selectedCards: [...selectedCards, card],
+    });
+  },
+
+  /**
+   * Deselect a card
+   */
+  deselectCard: (card: Card) => {
+    const selectedCards = get().selectedCards;
+    set({
+      selectedCards: selectedCards.filter((c) => c.id !== card.id),
+    });
+  },
+
+  /**
+   * Clear selection
+   */
+  clearSelection: () => {
+    set({ selectedCards: [] });
+  },
+
+  /**
+   * Meld cards (lay down a set or run)
+   */
+  meldCards: async (cards: Card[]) => {
+    const currentRoom = get().currentRoom;
+    if (!currentRoom) return;
+
+    try {
+      await gameRepository.meldCards(currentRoom.id, cards);
+      
+      // Remove melded cards from hand
+      const myHand = get().myHand;
+      const meldedCardIds = new Set(cards.map((c) => c.id));
+      
+      set({
+        myHand: myHand.filter((c) => !meldedCardIds.has(c.id)),
+        selectedCards: [],
+      });
+    } catch (error) {
+      set({
+        error:
+          error instanceof Error ? error.message : "วางไพ่ไม่สำเร็จ",
+      });
+    }
+  },
+
+  /**
+   * Knock (end round)
+   */
+  knock: async (deadwoodValue: number) => {
+    const currentRoom = get().currentRoom;
+    if (!currentRoom) return;
+
+    try {
+      await gameRepository.knock(currentRoom.id, deadwoodValue);
+    } catch (error) {
+      set({
+        error:
+          error instanceof Error ? error.message : "Knock ไม่สำเร็จ",
+      });
     }
   },
 }));

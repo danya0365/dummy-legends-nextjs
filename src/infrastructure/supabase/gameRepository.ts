@@ -202,6 +202,114 @@ export class GameRepository {
   }
 
   /**
+   * Initialize game state (deal cards)
+   */
+  async initializeGameState(roomId: string): Promise<any> {
+    const { data, error } = await supabaseClient.rpc("initialize_game_state", {
+      p_room_id: roomId,
+    });
+
+    if (error) {
+      console.error("Error initializing game:", error);
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  /**
+   * Update game state with cards
+   */
+  async updateGameState(params: {
+    roomId: string;
+    deck?: any[];
+    discardPile?: any[];
+    playerHands?: any;
+    playerMelds?: any;
+    scores?: any;
+  }): Promise<void> {
+    const { error } = await supabaseClient.rpc("update_game_state", {
+      p_room_id: params.roomId,
+      p_deck: params.deck ? JSON.stringify(params.deck) : undefined,
+      p_discard_pile: params.discardPile ? JSON.stringify(params.discardPile) : undefined,
+      p_player_hands: params.playerHands ? JSON.stringify(params.playerHands) : undefined,
+      p_player_melds: params.playerMelds ? JSON.stringify(params.playerMelds) : undefined,
+      p_scores: params.scores ? JSON.stringify(params.scores) : undefined,
+    });
+
+    if (error) {
+      console.error("Error updating game state:", error);
+      throw new Error(error.message);
+    }
+  }
+
+  /**
+   * Draw a card
+   */
+  async drawCard(roomId: string, fromDiscard: boolean = false): Promise<any> {
+    const { data, error } = await supabaseClient.rpc("draw_card", {
+      p_room_id: roomId,
+      p_from_discard: fromDiscard,
+    });
+
+    if (error) {
+      console.error("Error drawing card:", error);
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  /**
+   * Discard a card
+   */
+  async discardCard(roomId: string, card: any): Promise<any> {
+    const { data, error } = await supabaseClient.rpc("discard_card", {
+      p_room_id: roomId,
+      p_card: card,
+    });
+
+    if (error) {
+      console.error("Error discarding card:", error);
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  /**
+   * Meld cards (lay down)
+   */
+  async meldCards(roomId: string, cards: any[]): Promise<void> {
+    const { error } = await supabaseClient.rpc("meld_cards", {
+      p_room_id: roomId,
+      p_cards: JSON.stringify(cards),
+    });
+
+    if (error) {
+      console.error("Error melding cards:", error);
+      throw new Error(error.message);
+    }
+  }
+
+  /**
+   * Knock (end round)
+   */
+  async knock(roomId: string, deadwoodValue: number): Promise<any> {
+    const { data, error } = await supabaseClient.rpc("knock", {
+      p_room_id: roomId,
+      p_deadwood_value: deadwoodValue,
+    });
+
+    if (error) {
+      console.error("Error knocking:", error);
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  /**
    * Map API response to GameRoom type
    */
   private mapToGameRoom(data: {
