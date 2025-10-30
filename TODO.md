@@ -99,7 +99,7 @@ Dummy Legends - แพลตฟอร์มแข่งขันเกมไพ�
 - [x] Player list with status
 - [x] Room code sharing
 
-## Phase 4: Tournament System 🔄
+## Phase 4: Tournament System ✅
 
 ### 4.1 Tournament Foundation ✅
 - [x] Create tournament types and interfaces
@@ -116,12 +116,15 @@ Dummy Legends - แพลตฟอร์มแข่งขันเกมไพ�
 - [x] Tournament cards with details
 - [x] Empty state handling
 
-### 4.3 Tournament Details 🔄
-- [ ] Tournament Details Page
-- [ ] Registration system
-- [ ] Participant list
-- [ ] Prize breakdown
-- [ ] Rules display
+### 4.3 Tournament Details ✅
+- [x] Tournament Details Page with dynamic route
+- [x] Registration/Unregistration system
+- [x] Participant list with seeding
+- [x] Prize breakdown display
+- [x] Rules and requirements display
+- [x] Schedule timeline
+- [x] Organizer information
+- [x] Tab navigation (Overview, Participants, Rules)
 
 ## Phase 5: Leaderboard System 🔜
 > ดูรายละเอียดเพิ่มเติมใน `TODO_FEATURES.md`
@@ -139,11 +142,12 @@ Dummy Legends - แพลตฟอร์มแข่งขันเกมไพ�
 ~~2. Landing Page with Master Data และ Mock Data~~ ✅ เสร็จสิ้น
 ~~3. Authentication System (Login, Register, Forgot Password)~~ ✅ เสร็จสิ้น
 ~~4. Game Core System (Lobby, Create Room, Waiting Room)~~ ✅ เสร็จสิ้น
+~~5. Tournament System (Browse, Details, Registration)~~ ✅ เสร็จสิ้น
 
-**Next Steps (Phase 4 & Beyond):**
-1. Tournament System (Browse, Details, Registration)
-2. Leaderboard System (Rankings, Statistics)
-3. Community System (Chat, Friends, Guilds)
+**Next Steps (Phase 5 & Beyond):**
+1. Leaderboard System (Rankings, Statistics, ELO)
+2. Community System (Chat, Friends, Guilds)
+3. Profile System (Stats, Achievements, History)
 
 ## Notes
 - ✅ = Completed
