@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useGameStore } from "@/src/stores/gameStore";
-import { useAuthStore } from "@/src/stores/authStore";
 import {
   Users,
   Clock,
@@ -19,7 +18,6 @@ import type { GameMode } from "@/src/domain/types/game.types";
 export function CreateRoomView() {
   const router = useRouter();
   const { createRoom, isLoading, error, clearError } = useGameStore();
-  const { isAuthenticated } = useAuthStore();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -57,11 +55,6 @@ export function CreateRoomView() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
-
-    if (!isAuthenticated) {
-      router.push("/auth/login");
-      return;
-    }
 
     if (!validateForm()) {
       return;

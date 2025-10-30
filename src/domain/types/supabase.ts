@@ -9,6 +9,497 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      game_cards: {
+        Row: {
+          card_value: number
+          created_at: string | null
+          id: string
+          location: string
+          meld_id: string | null
+          owner_gamer_id: string | null
+          position_in_location: number | null
+          rank: Database["public"]["Enums"]["card_rank"]
+          session_id: string
+          suit: Database["public"]["Enums"]["card_suit"]
+          updated_at: string | null
+        }
+        Insert: {
+          card_value: number
+          created_at?: string | null
+          id?: string
+          location: string
+          meld_id?: string | null
+          owner_gamer_id?: string | null
+          position_in_location?: number | null
+          rank: Database["public"]["Enums"]["card_rank"]
+          session_id: string
+          suit: Database["public"]["Enums"]["card_suit"]
+          updated_at?: string | null
+        }
+        Update: {
+          card_value?: number
+          created_at?: string | null
+          id?: string
+          location?: string
+          meld_id?: string | null
+          owner_gamer_id?: string | null
+          position_in_location?: number | null
+          rank?: Database["public"]["Enums"]["card_rank"]
+          session_id?: string
+          suit?: Database["public"]["Enums"]["card_suit"]
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_cards_owner_gamer_id_fkey"
+            columns: ["owner_gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_cards_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_hands: {
+        Row: {
+          card_count: number
+          deadwood_count: number
+          deadwood_value: number
+          gamer_id: string
+          id: string
+          melds: Json | null
+          session_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          card_count?: number
+          deadwood_count?: number
+          deadwood_value?: number
+          gamer_id: string
+          id?: string
+          melds?: Json | null
+          session_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          card_count?: number
+          deadwood_count?: number
+          deadwood_value?: number
+          gamer_id?: string
+          id?: string
+          melds?: Json | null
+          session_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_hands_gamer_id_fkey"
+            columns: ["gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_hands_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_moves: {
+        Row: {
+          created_at: string | null
+          gamer_id: string
+          id: string
+          move_data: Json
+          move_number: number
+          move_type: Database["public"]["Enums"]["game_move_type"]
+          session_id: string
+          time_taken_seconds: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          gamer_id: string
+          id?: string
+          move_data?: Json
+          move_number: number
+          move_type: Database["public"]["Enums"]["game_move_type"]
+          session_id: string
+          time_taken_seconds?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          gamer_id?: string
+          id?: string
+          move_data?: Json
+          move_number?: number
+          move_type?: Database["public"]["Enums"]["game_move_type"]
+          session_id?: string
+          time_taken_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_moves_gamer_id_fkey"
+            columns: ["gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_moves_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_results: {
+        Row: {
+          created_at: string | null
+          elo_changes: Json | null
+          final_scores: Json
+          game_duration_seconds: number
+          id: string
+          room_id: string
+          session_id: string | null
+          total_moves: number
+          total_rounds: number
+          winner_gamer_id: string | null
+          winning_type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          elo_changes?: Json | null
+          final_scores: Json
+          game_duration_seconds: number
+          id?: string
+          room_id: string
+          session_id?: string | null
+          total_moves: number
+          total_rounds: number
+          winner_gamer_id?: string | null
+          winning_type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          elo_changes?: Json | null
+          final_scores?: Json
+          game_duration_seconds?: number
+          id?: string
+          room_id?: string
+          session_id?: string | null
+          total_moves?: number
+          total_rounds?: number
+          winner_gamer_id?: string | null
+          winning_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_results_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_results_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_results_winner_gamer_id_fkey"
+            columns: ["winner_gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_rooms: {
+        Row: {
+          allow_spectators: boolean
+          bet_amount: number
+          cards_per_player: number
+          created_at: string | null
+          current_player_count: number
+          finished_at: string | null
+          host_gamer_id: string
+          id: string
+          is_private: boolean
+          max_players: number
+          metadata: Json | null
+          mode: Database["public"]["Enums"]["game_mode"]
+          room_code: string
+          room_name: string
+          room_password: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["room_status"]
+          time_limit_seconds: number
+          winning_score: number
+        }
+        Insert: {
+          allow_spectators?: boolean
+          bet_amount?: number
+          cards_per_player?: number
+          created_at?: string | null
+          current_player_count?: number
+          finished_at?: string | null
+          host_gamer_id: string
+          id?: string
+          is_private?: boolean
+          max_players?: number
+          metadata?: Json | null
+          mode?: Database["public"]["Enums"]["game_mode"]
+          room_code: string
+          room_name: string
+          room_password?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["room_status"]
+          time_limit_seconds?: number
+          winning_score?: number
+        }
+        Update: {
+          allow_spectators?: boolean
+          bet_amount?: number
+          cards_per_player?: number
+          created_at?: string | null
+          current_player_count?: number
+          finished_at?: string | null
+          host_gamer_id?: string
+          id?: string
+          is_private?: boolean
+          max_players?: number
+          metadata?: Json | null
+          mode?: Database["public"]["Enums"]["game_mode"]
+          room_code?: string
+          room_name?: string
+          room_password?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["room_status"]
+          time_limit_seconds?: number
+          winning_score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_rooms_host_gamer_id_fkey"
+            columns: ["host_gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_sessions: {
+        Row: {
+          current_turn_gamer_id: string | null
+          current_turn_started_at: string | null
+          discard_pile_top_card_id: string | null
+          finished_at: string | null
+          game_state: Json | null
+          id: string
+          is_active: boolean
+          remaining_deck_cards: number
+          room_id: string
+          round_number: number
+          started_at: string | null
+          winner_gamer_id: string | null
+          winning_type: string | null
+        }
+        Insert: {
+          current_turn_gamer_id?: string | null
+          current_turn_started_at?: string | null
+          discard_pile_top_card_id?: string | null
+          finished_at?: string | null
+          game_state?: Json | null
+          id?: string
+          is_active?: boolean
+          remaining_deck_cards?: number
+          room_id: string
+          round_number?: number
+          started_at?: string | null
+          winner_gamer_id?: string | null
+          winning_type?: string | null
+        }
+        Update: {
+          current_turn_gamer_id?: string | null
+          current_turn_started_at?: string | null
+          discard_pile_top_card_id?: string | null
+          finished_at?: string | null
+          game_state?: Json | null
+          id?: string
+          is_active?: boolean
+          remaining_deck_cards?: number
+          room_id?: string
+          round_number?: number
+          started_at?: string | null
+          winner_gamer_id?: string | null
+          winning_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_sessions_current_turn_gamer_id_fkey"
+            columns: ["current_turn_gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_sessions_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_sessions_winner_gamer_id_fkey"
+            columns: ["winner_gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gamer_achievements: {
+        Row: {
+          achievement_code: string
+          achievement_description: string | null
+          achievement_name: string
+          created_at: string | null
+          gamer_id: string
+          id: string
+          is_completed: boolean
+          progress: number
+          reward_data: Json | null
+          reward_experience: number
+          target: number
+          unlocked_at: string | null
+        }
+        Insert: {
+          achievement_code: string
+          achievement_description?: string | null
+          achievement_name: string
+          created_at?: string | null
+          gamer_id: string
+          id?: string
+          is_completed?: boolean
+          progress?: number
+          reward_data?: Json | null
+          reward_experience?: number
+          target: number
+          unlocked_at?: string | null
+        }
+        Update: {
+          achievement_code?: string
+          achievement_description?: string | null
+          achievement_name?: string
+          created_at?: string | null
+          gamer_id?: string
+          id?: string
+          is_completed?: boolean
+          progress?: number
+          reward_data?: Json | null
+          reward_experience?: number
+          target?: number
+          unlocked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gamer_achievements_gamer_id_fkey"
+            columns: ["gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gamers: {
+        Row: {
+          best_win_streak: number
+          created_at: string | null
+          current_win_streak: number
+          elo_rating: number
+          experience_points: number
+          guest_display_name: string | null
+          guest_identifier: string | null
+          id: string
+          last_active_at: string | null
+          level: number
+          preferences: Json
+          profile_id: string | null
+          total_draws: number
+          total_games_played: number
+          total_gins: number
+          total_knocks: number
+          total_losses: number
+          total_points_scored: number
+          total_wins: number
+          updated_at: string | null
+        }
+        Insert: {
+          best_win_streak?: number
+          created_at?: string | null
+          current_win_streak?: number
+          elo_rating?: number
+          experience_points?: number
+          guest_display_name?: string | null
+          guest_identifier?: string | null
+          id?: string
+          last_active_at?: string | null
+          level?: number
+          preferences?: Json
+          profile_id?: string | null
+          total_draws?: number
+          total_games_played?: number
+          total_gins?: number
+          total_knocks?: number
+          total_losses?: number
+          total_points_scored?: number
+          total_wins?: number
+          updated_at?: string | null
+        }
+        Update: {
+          best_win_streak?: number
+          created_at?: string | null
+          current_win_streak?: number
+          elo_rating?: number
+          experience_points?: number
+          guest_display_name?: string | null
+          guest_identifier?: string | null
+          id?: string
+          last_active_at?: string | null
+          level?: number
+          preferences?: Json
+          profile_id?: string | null
+          total_draws?: number
+          total_games_played?: number
+          total_gins?: number
+          total_knocks?: number
+          total_losses?: number
+          total_points_scored?: number
+          total_wins?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gamers_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_roles: {
         Row: {
           granted_at: string | null
@@ -107,13 +598,142 @@ export type Database = {
         }
         Relationships: []
       }
+      room_players: {
+        Row: {
+          current_score: number
+          gamer_id: string
+          id: string
+          is_host: boolean
+          is_ready: boolean
+          joined_at: string | null
+          left_at: string | null
+          position: number
+          room_id: string
+          rounds_won: number
+          status: Database["public"]["Enums"]["player_status"]
+        }
+        Insert: {
+          current_score?: number
+          gamer_id: string
+          id?: string
+          is_host?: boolean
+          is_ready?: boolean
+          joined_at?: string | null
+          left_at?: string | null
+          position: number
+          room_id: string
+          rounds_won?: number
+          status?: Database["public"]["Enums"]["player_status"]
+        }
+        Update: {
+          current_score?: number
+          gamer_id?: string
+          id?: string
+          is_host?: boolean
+          is_ready?: boolean
+          joined_at?: string | null
+          left_at?: string | null
+          position?: number
+          room_id?: string
+          rounds_won?: number
+          status?: Database["public"]["Enums"]["player_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_players_gamer_id_fkey"
+            columns: ["gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_players_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_spectators: {
+        Row: {
+          gamer_id: string
+          id: string
+          joined_at: string | null
+          room_id: string
+        }
+        Insert: {
+          gamer_id: string
+          id?: string
+          joined_at?: string | null
+          room_id: string
+        }
+        Update: {
+          gamer_id?: string
+          id?: string
+          joined_at?: string | null
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_spectators_gamer_id_fkey"
+            columns: ["gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_spectators_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      can_access_gamer: {
+        Args: { p_gamer_id: string; p_guest_identifier?: string }
+        Returns: boolean
+      }
+      create_game_room: {
+        Args: {
+          p_gamer_id: string
+          p_room_name: string
+          p_guest_identifier?: string
+          p_mode?: Database["public"]["Enums"]["game_mode"]
+          p_max_players?: number
+          p_bet_amount?: number
+          p_time_limit_seconds?: number
+          p_is_private?: boolean
+          p_room_password?: string
+        }
+        Returns: {
+          room_id: string
+          room_code: string
+        }[]
+      }
+      create_or_get_gamer: {
+        Args: {
+          p_guest_identifier?: string
+          p_guest_display_name?: string
+          p_profile_id?: string
+        }
+        Returns: {
+          gamer_id: string
+          is_new: boolean
+        }[]
+      }
       create_profile: {
         Args: { username: string; full_name?: string; avatar_url?: string }
+        Returns: string
+      }
+      generate_room_code: {
+        Args: Record<PropertyKey, never>
         Returns: string
       }
       get_active_profile: {
@@ -152,6 +772,29 @@ export type Database = {
         Args: { p_id: string }
         Returns: Json
       }
+      get_available_rooms: {
+        Args: {
+          p_mode?: Database["public"]["Enums"]["game_mode"]
+          p_limit?: number
+          p_offset?: number
+        }
+        Returns: {
+          id: string
+          room_code: string
+          room_name: string
+          host_gamer_id: string
+          status: Database["public"]["Enums"]["room_status"]
+          mode: Database["public"]["Enums"]["game_mode"]
+          current_player_count: number
+          max_players: number
+          bet_amount: number
+          created_at: string
+        }[]
+      }
+      get_card_value: {
+        Args: { p_rank: Database["public"]["Enums"]["card_rank"] }
+        Returns: number
+      }
       get_paginated_users: {
         Args: { p_page?: number; p_limit?: number }
         Returns: Json
@@ -159,6 +802,10 @@ export type Database = {
       get_profile_role: {
         Args: { profile_id: string }
         Returns: Database["public"]["Enums"]["profile_role"]
+      }
+      get_room_details: {
+        Args: { p_room_id: string }
+        Returns: Json
       }
       get_user_profiles: {
         Args: Record<PropertyKey, never>
@@ -196,6 +843,28 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      join_game_room: {
+        Args: {
+          p_gamer_id: string
+          p_guest_identifier?: string
+          p_room_code?: string
+          p_room_id?: string
+          p_room_password?: string
+        }
+        Returns: string
+      }
+      leave_game_room: {
+        Args: {
+          p_gamer_id: string
+          p_room_id: string
+          p_guest_identifier?: string
+        }
+        Returns: boolean
+      }
+      link_guest_to_profile: {
+        Args: { p_guest_identifier: string; p_profile_id: string }
+        Returns: boolean
+      }
       migrate_profile_roles: {
         Args: Record<PropertyKey, never>
         Returns: undefined
@@ -211,9 +880,51 @@ export type Database = {
         }
         Returns: boolean
       }
+      toggle_ready_status: {
+        Args: {
+          p_gamer_id: string
+          p_room_id: string
+          p_guest_identifier?: string
+        }
+        Returns: boolean
+      }
+      update_gamer_preferences: {
+        Args: {
+          p_gamer_id: string
+          p_preferences: Json
+          p_guest_identifier?: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
+      card_rank:
+        | "A"
+        | "2"
+        | "3"
+        | "4"
+        | "5"
+        | "6"
+        | "7"
+        | "8"
+        | "9"
+        | "10"
+        | "J"
+        | "Q"
+        | "K"
+      card_suit: "hearts" | "diamonds" | "clubs" | "spades"
+      game_mode: "casual" | "ranked" | "tournament" | "private"
+      game_move_type:
+        | "draw_deck"
+        | "draw_discard"
+        | "discard"
+        | "meld"
+        | "lay_off"
+        | "knock"
+        | "gin"
+      player_status: "waiting" | "ready" | "playing" | "disconnected" | "left"
       profile_role: "user" | "moderator" | "admin"
+      room_status: "waiting" | "ready" | "playing" | "finished" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -329,7 +1040,35 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      card_rank: [
+        "A",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "J",
+        "Q",
+        "K",
+      ],
+      card_suit: ["hearts", "diamonds", "clubs", "spades"],
+      game_mode: ["casual", "ranked", "tournament", "private"],
+      game_move_type: [
+        "draw_deck",
+        "draw_discard",
+        "discard",
+        "meld",
+        "lay_off",
+        "knock",
+        "gin",
+      ],
+      player_status: ["waiting", "ready", "playing", "disconnected", "left"],
       profile_role: ["user", "moderator", "admin"],
+      room_status: ["waiting", "ready", "playing", "finished", "cancelled"],
     },
   },
 } as const

@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useGameStore } from "@/src/stores/gameStore";
-import { useAuthStore } from "@/src/stores/authStore";
 import {
   Users,
   Clock,
@@ -29,7 +28,9 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
   const router = useRouter();
   const {
     currentRoom,
-    fetchAvailableRooms,
+    gamerId,
+    initializeGamer,
+    joinRoom,
     leaveRoom,
     toggleReady,
     startGame,
@@ -37,22 +38,27 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
     error,
     clearError,
   } = useGameStore();
-  const { user, isAuthenticated } = useAuthStore();
 
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push("/auth/login");
-      return;
-    }
-
-    // In real app, would fetch room by ID
-    // For now, check if we're in a room or fetch available rooms
-    if (!currentRoom) {
-      fetchAvailableRooms();
-    }
-  }, [isAuthenticated, currentRoom, fetchAvailableRooms, router]);
+    const initialize = async () => {
+      // Initialize gamer first
+      await initializeGamer();
+      
+      // If not in room, join by roomId
+      if (!currentRoom) {
+        try {
+          await joinRoom({ roomId: _roomId });
+        } catch (error) {
+          console.error("Failed to join room:", error);
+          router.push("/game/lobby");
+        }
+      }
+    };
+    
+    initialize();
+  }, [_roomId, currentRoom, initializeGamer, joinRoom, router]);
 
   const handleCopyCode = () => {
     if (currentRoom) {
@@ -81,8 +87,8 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
     }
   };
 
-  const isHost = currentRoom?.players.find((p) => p.userId === user?.id)?.isHost;
-  const currentPlayer = currentRoom?.players.find((p) => p.userId === user?.id);
+  const isHost = currentRoom?.players.find((p) => p.userId === gamerId)?.isHost;
+  const currentPlayer = currentRoom?.players.find((p) => p.userId === gamerId);
   const allPlayersReady = currentRoom?.players.every((p) => p.isReady || p.isHost);
   const canStartGame = isHost && allPlayersReady && currentRoom && currentRoom.currentPlayerCount >= 2;
 
@@ -206,11 +212,11 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                 ผู้เล่นในห้อง
               </h2>
               <div className="space-y-3">
-                {currentRoom.players.map((player, index) => (
+                {currentRoom.players.map((player) => (
                   <div
                     key={player.id}
                     className={`flex items-center justify-between p-4 rounded-lg border-2 ${
-                      player.userId === user?.id
+                      player.userId === gamerId
                         ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
                         : "border-gray-200 dark:border-gray-700"
                     }`}
@@ -231,7 +237,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                           <span className="font-semibold text-gray-900 dark:text-gray-100">
                             {player.displayName}
                           </span>
-                          {player.userId === user?.id && (
+                          {player.userId === gamerId && (
                             <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-0.5 rounded">
                               คุณ
                             </span>

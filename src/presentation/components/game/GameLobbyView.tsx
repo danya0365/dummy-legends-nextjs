@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useGameStore } from "@/src/stores/gameStore";
-import { useAuthStore } from "@/src/stores/authStore";
 import {
   Users,
   Clock,
@@ -21,9 +20,15 @@ import type { GameRoom, GameMode } from "@/src/domain/types/game.types";
 
 export function GameLobbyView() {
   const router = useRouter();
-  const { availableRooms, fetchAvailableRooms, joinRoom, isLoading, error, clearError } =
-    useGameStore();
-  const { isAuthenticated } = useAuthStore();
+  const { 
+    availableRooms, 
+    fetchAvailableRooms, 
+    joinRoom, 
+    initializeGamer,
+    isLoading, 
+    error, 
+    clearError 
+  } = useGameStore();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMode, setFilterMode] = useState<GameMode | "all">("all");
@@ -32,23 +37,17 @@ export function GameLobbyView() {
   const [password, setPassword] = useState("");
 
   useEffect(() => {
-    fetchAvailableRooms();
-  }, [fetchAvailableRooms]);
+    // Initialize gamer first (guest or authenticated)
+    initializeGamer().then(() => {
+      fetchAvailableRooms();
+    });
+  }, [initializeGamer, fetchAvailableRooms]);
 
   const handleCreateRoom = () => {
-    if (!isAuthenticated) {
-      router.push("/auth/login");
-      return;
-    }
     router.push("/game/create-room");
   };
 
   const handleJoinRoom = async (room: GameRoom) => {
-    if (!isAuthenticated) {
-      router.push("/auth/login");
-      return;
-    }
-
     if (room.settings.isPrivate) {
       setSelectedRoom(room);
       setShowPasswordModal(true);
