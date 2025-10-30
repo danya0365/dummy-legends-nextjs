@@ -9,8 +9,13 @@ import type {
   Player,
   RoomStatus,
 } from "@/src/domain/types/game.types";
+import { gameRepository } from "@/src/infrastructure/supabase/gameRepository";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 interface GameStore extends GameState {
+  // Realtime subscription
+  roomSubscription: RealtimeChannel | null;
+  
   // Actions
   createRoom: (data: CreateRoomData) => Promise<GameRoom>;
   joinRoom: (data: JoinRoomData) => Promise<void>;
@@ -24,6 +29,8 @@ interface GameStore extends GameState {
   updatePlayer: (playerId: string, updates: Partial<Player>) => void;
   setError: (error: string | null) => void;
   clearError: () => void;
+  subscribeToRoom: (roomId: string) => void;
+  unsubscribeFromRoom: () => void;
 }
 
 /**
@@ -37,6 +44,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isInRoom: false,
   isLoading: false,
   error: null,
+  roomSubscription: null,
 
   /**
    * Create a new game room
@@ -45,49 +53,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      // TODO: Replace with actual API call to Supabase
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Generate room code (6 digits)
-      const roomCode = Math.random().toString().substring(2, 8);
-
-      // Mock room creation
-      const newRoom: GameRoom = {
-        id: `room-${Date.now()}`,
-        code: roomCode,
-        hostId: "user-001", // TODO: Get from auth store
-        name: data.name,
-        status: "waiting",
-        mode: data.mode,
-        settings: {
-          maxPlayers: data.maxPlayers,
-          betAmount: data.betAmount,
-          timeLimit: data.timeLimit,
-          isPrivate: data.isPrivate,
-          password: data.password,
-          allowSpectators: data.allowSpectators,
-        },
-        players: [
-          {
-            id: `player-${Date.now()}`,
-            userId: "user-001",
-            username: "testuser",
-            displayName: "Test User",
-            avatar: null,
-            level: 1,
-            elo: 1000,
-            status: "waiting",
-            isHost: true,
-            isReady: false,
-            position: 0,
-            joinedAt: new Date().toISOString(),
-          },
-        ],
-        spectators: [],
-        currentPlayerCount: 1,
-        maxPlayerCount: data.maxPlayers,
-        createdAt: new Date().toISOString(),
-      };
+      const newRoom = await gameRepository.createRoom(data);
 
       set({
         currentRoom: newRoom,
@@ -95,6 +61,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         isLoading: false,
         error: null,
       });
+
+      // Subscribe to room updates
+      get().subscribeToRoom(newRoom.id);
 
       return newRoom;
     } catch (error) {
@@ -116,55 +85,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      // TODO: Replace with actual API call to Supabase
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await gameRepository.joinRoom(data);
 
-      // Mock finding room
-      const availableRooms = get().availableRooms;
-      const room = availableRooms.find(
-        (r) => r.id === data.roomId || r.code === data.roomCode
-      );
+      // Get room details after joining
+      const roomId = data.roomId || "";
+      if (roomId) {
+        const room = await gameRepository.getRoomDetails(roomId);
+        if (room) {
+          set({
+            currentRoom: room,
+            isInRoom: true,
+            isLoading: false,
+            error: null,
+          });
 
-      if (!room) {
-        throw new Error("ไม่พบห้องเกม");
+          // Subscribe to room updates
+          get().subscribeToRoom(room.id);
+        }
+      } else if (data.roomCode) {
+        // If joined by code, find the room in available rooms
+        const rooms = await gameRepository.getAvailableRooms();
+        const room = rooms.find((r) => r.code === data.roomCode);
+        if (room) {
+          set({
+            currentRoom: room,
+            isInRoom: true,
+            isLoading: false,
+            error: null,
+          });
+
+          // Subscribe to room updates
+          get().subscribeToRoom(room.id);
+        }
       }
-
-      if (room.currentPlayerCount >= room.maxPlayerCount) {
-        throw new Error("ห้องเต็ม");
-      }
-
-      if (room.settings.isPrivate && room.settings.password !== data.password) {
-        throw new Error("รหัสผ่านไม่ถูกต้อง");
-      }
-
-      // Add player to room
-      const newPlayer: Player = {
-        id: `player-${Date.now()}`,
-        userId: "user-001",
-        username: "testuser",
-        displayName: "Test User",
-        avatar: null,
-        level: 1,
-        elo: 1000,
-        status: "waiting",
-        isHost: false,
-        isReady: false,
-        position: room.players.length,
-        joinedAt: new Date().toISOString(),
-      };
-
-      const updatedRoom: GameRoom = {
-        ...room,
-        players: [...room.players, newPlayer],
-        currentPlayerCount: room.currentPlayerCount + 1,
-      };
-
-      set({
-        currentRoom: updatedRoom,
-        isInRoom: true,
-        isLoading: false,
-        error: null,
-      });
     } catch (error) {
       set({
         error:
@@ -180,34 +133,50 @@ export const useGameStore = create<GameStore>((set, get) => ({
   /**
    * Leave current room
    */
-  leaveRoom: () => {
-    set({
-      currentRoom: null,
-      isInRoom: false,
-      error: null,
-    });
+  leaveRoom: async () => {
+    const currentRoom = get().currentRoom;
+    if (!currentRoom) return;
+
+    try {
+      // Unsubscribe from room updates
+      get().unsubscribeFromRoom();
+
+      await gameRepository.leaveRoom(currentRoom.id);
+
+      set({
+        currentRoom: null,
+        isInRoom: false,
+        error: null,
+      });
+    } catch (error) {
+      console.error("Error leaving room:", error);
+      // Still clear local state even if API call fails
+      set({
+        currentRoom: null,
+        isInRoom: false,
+        error: null,
+      });
+    }
   },
 
   /**
    * Toggle ready status
    */
-  toggleReady: () => {
+  toggleReady: async () => {
     const currentRoom = get().currentRoom;
     if (!currentRoom) return;
 
-    const userId = "user-001"; // TODO: Get from auth store
-    const updatedPlayers = currentRoom.players.map((player) =>
-      player.userId === userId
-        ? { ...player, isReady: !player.isReady }
-        : player
-    );
-
-    set({
-      currentRoom: {
-        ...currentRoom,
-        players: updatedPlayers,
-      },
-    });
+    try {
+      await gameRepository.toggleReady(currentRoom.id);
+      // Room will be updated via realtime subscription
+    } catch (error) {
+      set({
+        error:
+          error instanceof Error
+            ? error.message
+            : "เปลี่ยนสถานะพร้อมไม่สำเร็จ",
+      });
+    }
   },
 
   /**
@@ -222,36 +191,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         throw new Error("ไม่พบห้องเกม");
       }
 
-      const userId = "user-001"; // TODO: Get from auth store
-      const isHost = currentRoom.players.find((p) => p.userId === userId)?.isHost;
+      await gameRepository.startGame(currentRoom.id);
+      // Room will be updated via realtime subscription
 
-      if (!isHost) {
-        throw new Error("เฉพาะเจ้าของห้องเท่านั้นที่สามารถเริ่มเกมได้");
-      }
-
-      const allReady = currentRoom.players.every(
-        (p) => p.isReady || p.isHost
-      );
-
-      if (!allReady) {
-        throw new Error("ผู้เล่นบางคนยังไม่พร้อม");
-      }
-
-      if (currentRoom.currentPlayerCount < 2) {
-        throw new Error("ต้องมีผู้เล่นอย่างน้อย 2 คน");
-      }
-
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      set({
-        currentRoom: {
-          ...currentRoom,
-          status: "playing",
-          startedAt: new Date().toISOString(),
-        },
-        isLoading: false,
-      });
+      set({ isLoading: false });
     } catch (error) {
       set({
         error:
@@ -271,99 +214,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      // TODO: Replace with actual API call to Supabase
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Mock available rooms
-      const mockRooms: GameRoom[] = [
-        {
-          id: "room-001",
-          code: "123456",
-          hostId: "user-002",
-          name: "ห้องมือใหม่",
-          status: "waiting",
-          mode: "casual",
-          settings: {
-            maxPlayers: 4,
-            betAmount: 100,
-            timeLimit: 60,
-            isPrivate: false,
-            allowSpectators: true,
-          },
-          players: [
-            {
-              id: "player-001",
-              userId: "user-002",
-              username: "pro_player",
-              displayName: "มือโปร",
-              avatar: null,
-              level: 25,
-              elo: 1500,
-              status: "waiting",
-              isHost: true,
-              isReady: true,
-              position: 0,
-              joinedAt: new Date().toISOString(),
-            },
-          ],
-          spectators: [],
-          currentPlayerCount: 1,
-          maxPlayerCount: 4,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: "room-002",
-          code: "789012",
-          hostId: "user-003",
-          name: "ห้องสูง 🔥",
-          status: "waiting",
-          mode: "ranked",
-          settings: {
-            maxPlayers: 4,
-            betAmount: 500,
-            timeLimit: 45,
-            isPrivate: false,
-            allowSpectators: true,
-          },
-          players: [
-            {
-              id: "player-002",
-              userId: "user-003",
-              username: "card_master",
-              displayName: "เซียนไพ่",
-              avatar: null,
-              level: 50,
-              elo: 2000,
-              status: "waiting",
-              isHost: true,
-              isReady: true,
-              position: 0,
-              joinedAt: new Date().toISOString(),
-            },
-            {
-              id: "player-003",
-              userId: "user-004",
-              username: "lucky_ace",
-              displayName: "โชคดี",
-              avatar: null,
-              level: 35,
-              elo: 1800,
-              status: "waiting",
-              isHost: false,
-              isReady: false,
-              position: 1,
-              joinedAt: new Date().toISOString(),
-            },
-          ],
-          spectators: [],
-          currentPlayerCount: 2,
-          maxPlayerCount: 4,
-          createdAt: new Date().toISOString(),
-        },
-      ];
+      const rooms = await gameRepository.getAvailableRooms();
 
       set({
-        availableRooms: mockRooms,
+        availableRooms: rooms,
         isLoading: false,
         error: null,
       });
@@ -455,5 +309,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
    */
   clearError: () => {
     set({ error: null });
+  },
+
+  /**
+   * Subscribe to room updates
+   */
+  subscribeToRoom: (roomId: string) => {
+    // Unsubscribe from previous subscription if exists
+    get().unsubscribeFromRoom();
+
+    const subscription = gameRepository.subscribeToRoom(
+      roomId,
+      (updatedRoom) => {
+        set({ currentRoom: updatedRoom });
+      },
+      (players) => {
+        const currentRoom = get().currentRoom;
+        if (currentRoom) {
+          set({
+            currentRoom: {
+              ...currentRoom,
+              players,
+              currentPlayerCount: players.length,
+            },
+          });
+        }
+      }
+    );
+
+    set({ roomSubscription: subscription });
+  },
+
+  /**
+   * Unsubscribe from room updates
+   */
+  unsubscribeFromRoom: () => {
+    const subscription = get().roomSubscription;
+    if (subscription) {
+      gameRepository.unsubscribeFromRoom(subscription);
+      set({ roomSubscription: null });
+    }
   },
 }));
