@@ -767,6 +767,15 @@ export type Database = {
         }
         Returns: string
       }
+      finish_dummy_round_if_applicable: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_trigger_move: Database["public"]["Enums"]["game_move_type"]
+          p_guest_identifier?: string
+        }
+        Returns: string
+      }
       finish_game_round: {
         Args: {
           p_session_id: string
@@ -906,6 +915,14 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      is_guest_participant_in_room: {
+        Args: { p_room_id: string }
+        Returns: boolean
+      }
+      is_guest_participant_in_session: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
       is_moderator_or_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
@@ -1001,6 +1018,7 @@ export type Database = {
         | "lay_off"
         | "knock"
         | "gin"
+        | "dummy_finish"
       player_status: "waiting" | "ready" | "playing" | "disconnected" | "left"
       profile_role: "user" | "moderator" | "admin"
       room_status: "waiting" | "ready" | "playing" | "finished" | "cancelled"
@@ -1144,6 +1162,7 @@ export const Constants = {
         "lay_off",
         "knock",
         "gin",
+        "dummy_finish",
       ],
       player_status: ["waiting", "ready", "playing", "disconnected", "left"],
       profile_role: ["user", "moderator", "admin"],

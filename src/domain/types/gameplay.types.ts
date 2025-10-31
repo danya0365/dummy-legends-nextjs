@@ -83,7 +83,7 @@ export interface GameMove {
   id: string;
   sessionId: string;
   gamerId: string;
-  moveType: "draw" | "discard" | "meld" | "knock" | "gin";
+  moveType: "draw" | "discard" | "meld" | "knock" | "gin" | "dummy_finish";
   moveNumber: number;
   moveData: Record<string, unknown>;
   timeTakenSeconds: number | null;

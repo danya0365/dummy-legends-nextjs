@@ -15,7 +15,7 @@ CREATE TYPE public.player_status AS ENUM ('waiting', 'ready', 'playing', 'discon
 CREATE TYPE public.game_mode AS ENUM ('casual', 'ranked', 'tournament', 'private');
 CREATE TYPE public.card_suit AS ENUM ('hearts', 'diamonds', 'clubs', 'spades');
 CREATE TYPE public.card_rank AS ENUM ('A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K');
-CREATE TYPE public.game_move_type AS ENUM ('draw_deck', 'draw_discard', 'discard', 'meld', 'lay_off', 'knock', 'gin');
+CREATE TYPE public.game_move_type AS ENUM ('draw_deck', 'draw_discard', 'discard', 'meld', 'lay_off', 'knock', 'gin', 'dummy_finish');
 
 -- =====================================================
 -- GAMERS TABLE - Core identity for all players

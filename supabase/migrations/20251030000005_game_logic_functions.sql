@@ -349,7 +349,115 @@ BEGIN
     jsonb_build_object('meld_id', v_meld_id, 'cards', p_meld_cards)
   );
 
+  PERFORM public.finish_dummy_round_if_applicable(
+    p_session_id => p_session_id,
+    p_gamer_id => p_gamer_id,
+    p_trigger_move => 'meld',
+    p_guest_identifier => p_guest_identifier
+  );
+
   RETURN v_meld_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =====================================================
+-- DUMMY FINISH HELPER
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.finish_dummy_round_if_applicable(
+  p_session_id UUID,
+  p_gamer_id UUID,
+  p_trigger_move public.game_move_type,
+  p_guest_identifier TEXT DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+  v_can_access BOOLEAN;
+  v_card_count INTEGER;
+  v_remaining_card UUID;
+  v_new_discard_top UUID;
+  v_result UUID;
+BEGIN
+  IF p_trigger_move NOT IN ('meld', 'lay_off') THEN
+    RETURN NULL;
+  END IF;
+
+  v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
+  IF NOT v_can_access THEN
+    RAISE EXCEPTION 'Not authorized';
+  END IF;
+
+  SELECT card_count
+  INTO v_card_count
+  FROM public.game_hands
+  WHERE session_id = p_session_id
+    AND gamer_id = p_gamer_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Game hand not found';
+  END IF;
+
+  IF v_card_count = 1 THEN
+    SELECT id
+    INTO v_remaining_card
+    FROM public.game_cards
+    WHERE session_id = p_session_id
+      AND owner_gamer_id = p_gamer_id
+      AND location = 'hand'
+    LIMIT 1
+    FOR UPDATE;
+
+    IF v_remaining_card IS NOT NULL THEN
+      UPDATE public.game_cards
+      SET location = 'discard',
+          owner_gamer_id = NULL,
+          position_in_location = 0,
+          updated_at = NOW()
+      WHERE id = v_remaining_card;
+
+      UPDATE public.game_hands
+      SET card_count = card_count - 1,
+          updated_at = NOW()
+      WHERE session_id = p_session_id
+        AND gamer_id = p_gamer_id;
+
+      WITH reordered AS (
+        SELECT id,
+               ROW_NUMBER() OVER (ORDER BY position_in_location, id) - 1 AS new_position
+        FROM public.game_cards
+        WHERE session_id = p_session_id
+          AND location = 'discard'
+      )
+      UPDATE public.game_cards gc
+      SET position_in_location = reordered.new_position
+      FROM reordered
+      WHERE gc.id = reordered.id;
+
+      SELECT id
+      INTO v_new_discard_top
+      FROM public.game_cards
+      WHERE session_id = p_session_id
+        AND location = 'discard'
+      ORDER BY position_in_location
+      LIMIT 1;
+
+      UPDATE public.game_sessions
+      SET discard_pile_top_card_id = v_new_discard_top
+      WHERE id = p_session_id;
+    END IF;
+
+    v_result := public.finish_game_round(
+      p_session_id => p_session_id,
+      p_gamer_id => p_gamer_id,
+      p_winning_type => 'dummy_finish',
+      p_guest_identifier => p_guest_identifier
+    );
+
+    RETURN v_result;
+  END IF;
+
+  RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -593,32 +701,6 @@ BEGIN
     jsonb_build_object('card_id', p_card_id)
   );
   
-  -- Check if discard ends the round (auto knock/gin)
-  SELECT COALESCE(SUM(card_value), 0), COALESCE(COUNT(id), 0)
-  INTO v_deadwood_value, v_deadwood_count
-  FROM public.game_cards
-  WHERE session_id = p_session_id
-    AND owner_gamer_id = p_gamer_id
-    AND location = 'hand';
-
-  v_winning_type := NULL;
-
-  IF v_deadwood_count = 0 THEN
-    v_winning_type := 'gin';
-  ELSIF v_deadwood_value <= 10 THEN
-    v_winning_type := 'knock';
-  END IF;
-
-  IF v_winning_type IS NOT NULL THEN
-    v_finish_result := public.finish_game_round(
-      p_session_id => p_session_id,
-      p_gamer_id => p_gamer_id,
-      p_winning_type => v_winning_type,
-      p_guest_identifier => p_guest_identifier
-    );
-    RETURN true;
-  END IF;
-
   -- Get next player
   SELECT gamer_id INTO v_next_player
   FROM public.room_players
@@ -662,7 +744,7 @@ DECLARE
   v_result_id UUID;
   v_room_id UUID;
   v_final_scores JSONB;
-  v_supported_types CONSTANT public.game_move_type[] := ARRAY['knock', 'gin'];
+  v_supported_types CONSTANT public.game_move_type[] := ARRAY['knock', 'gin', 'dummy_finish'];
 BEGIN
   IF p_winning_type IS NULL THEN
     RAISE EXCEPTION 'Winning type is required';
