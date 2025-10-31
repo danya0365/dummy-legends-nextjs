@@ -360,6 +360,14 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
                   โหมดเกิดไพ่
                 </button>
               )}
+
+              <button
+                onClick={handleDiscard}
+                disabled={!isMyTurn || !hasDrawn || !selectedCardId || isLoading}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {selectedCardId ? "ทิ้งไพ่ใบนี้" : "เลือกไพ่เพื่อทิ้ง"}
+              </button>
             </div>
           </div>
 
