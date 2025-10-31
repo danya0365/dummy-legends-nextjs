@@ -607,6 +607,192 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =====================================================
+-- FINISH GAME ROUND
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.finish_game_round(
+  p_session_id UUID,
+  p_gamer_id UUID,
+  p_winning_type public.game_move_type,
+  p_guest_identifier TEXT DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+  v_can_access BOOLEAN;
+  v_session RECORD;
+  v_deadwood_value INTEGER := 0;
+  v_deadwood_count INTEGER := 0;
+  v_move_number INTEGER;
+  v_total_moves INTEGER;
+  v_duration_seconds INTEGER := 0;
+  v_result_id UUID;
+  v_room_id UUID;
+  v_final_scores JSONB;
+  v_supported_types CONSTANT public.game_move_type[] := ARRAY['knock', 'gin'];
+BEGIN
+  IF p_winning_type IS NULL THEN
+    RAISE EXCEPTION 'Winning type is required';
+  END IF;
+
+  IF NOT (p_winning_type = ANY(v_supported_types)) THEN
+    RAISE EXCEPTION 'Unsupported winning type %', p_winning_type;
+  END IF;
+
+  v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
+  IF NOT v_can_access THEN
+    RAISE EXCEPTION 'Not authorized';
+  END IF;
+
+  SELECT gs.*
+  INTO v_session
+  FROM public.game_sessions gs
+  WHERE gs.id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Game session not found';
+  END IF;
+
+  IF NOT v_session.is_active THEN
+    RAISE EXCEPTION 'Game session already finished';
+  END IF;
+
+  IF v_session.current_turn_gamer_id IS DISTINCT FROM p_gamer_id THEN
+    RAISE EXCEPTION 'Not your turn';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.game_results WHERE session_id = p_session_id
+  ) THEN
+    RAISE EXCEPTION 'Game session already has results recorded';
+  END IF;
+
+  SELECT COALESCE(SUM(card_value), 0), COALESCE(COUNT(id), 0)
+  INTO v_deadwood_value, v_deadwood_count
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND owner_gamer_id = p_gamer_id
+    AND location = 'hand';
+
+  IF p_winning_type = 'gin' THEN
+    IF v_deadwood_count > 0 THEN
+      RAISE EXCEPTION 'Gin requires zero deadwood cards';
+    END IF;
+  ELSIF p_winning_type = 'knock' THEN
+    IF v_deadwood_value > 10 THEN
+      RAISE EXCEPTION 'Knock requires deadwood value of 10 or less';
+    END IF;
+  END IF;
+
+  WITH player_deadwood AS (
+    SELECT gh.session_id,
+           gh.gamer_id,
+           COALESCE(COUNT(gc.id), 0) AS card_count,
+           COALESCE(SUM(gc.card_value), 0) AS total_value
+    FROM public.game_hands gh
+    LEFT JOIN public.game_cards gc
+      ON gc.session_id = gh.session_id
+     AND gc.owner_gamer_id = gh.gamer_id
+     AND gc.location = 'hand'
+    WHERE gh.session_id = p_session_id
+    GROUP BY gh.session_id, gh.gamer_id
+  )
+  UPDATE public.game_hands gh
+  SET deadwood_count = pd.card_count,
+      deadwood_value = pd.total_value,
+      updated_at = NOW()
+  FROM player_deadwood pd
+  WHERE gh.session_id = pd.session_id
+    AND gh.gamer_id = pd.gamer_id;
+
+  SELECT COALESCE(jsonb_agg(
+           jsonb_build_object(
+             'gamer_id', gh.gamer_id,
+             'deadwood_count', gh.deadwood_count,
+             'deadwood_value', gh.deadwood_value,
+             'melds', COALESCE(gh.melds, '[]'::jsonb)
+           )
+           ORDER BY gh.deadwood_value, gh.gamer_id
+         ), '[]'::jsonb)
+  INTO v_final_scores
+  FROM public.game_hands gh
+  WHERE gh.session_id = p_session_id;
+
+  v_move_number := (
+    SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id
+  );
+
+  INSERT INTO public.game_moves (
+    session_id,
+    gamer_id,
+    move_type,
+    move_number,
+    move_data
+  ) VALUES (
+    p_session_id,
+    p_gamer_id,
+    p_winning_type,
+    v_move_number,
+    jsonb_build_object(
+      'deadwood_value', v_deadwood_value,
+      'deadwood_count', v_deadwood_count
+    )
+  );
+
+  v_total_moves := v_move_number;
+  v_room_id := v_session.room_id;
+
+  v_duration_seconds := COALESCE(
+    EXTRACT(EPOCH FROM (NOW() - v_session.started_at))::INTEGER,
+    0
+  );
+
+  UPDATE public.game_sessions
+  SET is_active = false,
+      winner_gamer_id = p_gamer_id,
+      winning_type = p_winning_type::TEXT,
+      finished_at = NOW(),
+      current_turn_gamer_id = NULL
+  WHERE id = p_session_id;
+
+  UPDATE public.game_rooms
+  SET status = 'finished',
+      finished_at = NOW()
+  WHERE id = v_room_id;
+
+  UPDATE public.room_players
+  SET status = 'waiting',
+      is_ready = false,
+      rounds_won = rounds_won + CASE WHEN gamer_id = p_gamer_id THEN 1 ELSE 0 END
+  WHERE room_id = v_room_id;
+
+  INSERT INTO public.game_results (
+    room_id,
+    session_id,
+    winner_gamer_id,
+    winning_type,
+    final_scores,
+    total_rounds,
+    total_moves,
+    game_duration_seconds,
+    created_at
+  ) VALUES (
+    v_room_id,
+    p_session_id,
+    p_gamer_id,
+    p_winning_type::TEXT,
+    v_final_scores,
+    v_session.round_number,
+    v_total_moves,
+    v_duration_seconds,
+    NOW()
+  ) RETURNING id INTO v_result_id;
+
+  RETURN v_result_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =====================================================
 -- GET GAME STATE
 -- =====================================================
 

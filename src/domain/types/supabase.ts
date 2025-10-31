@@ -767,6 +767,15 @@ export type Database = {
         }
         Returns: string
       }
+      finish_game_round: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_winning_type: Database["public"]["Enums"]["game_move_type"]
+          p_guest_identifier?: string
+        }
+        Returns: string
+      }
       generate_room_code: {
         Args: Record<PropertyKey, never>
         Returns: string
