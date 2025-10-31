@@ -1,4 +1,5 @@
 import { GamePlayView } from "@/src/presentation/components/game/GamePlayView";
+import { MainLayout } from "@/src/presentation/components/layout";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -17,5 +18,9 @@ interface GamePlayPageProps {
 export default async function GamePlayPage({ params }: GamePlayPageProps) {
   const resolvedParams = await params;
 
-  return <GamePlayView sessionId={resolvedParams.sessionId} />;
+  return (
+    <MainLayout>
+      <GamePlayView sessionId={resolvedParams.sessionId} />
+    </MainLayout>
+  );
 }

@@ -11,6 +11,7 @@ import {
   Eye,
   Filter,
   Lock,
+  Play,
   Plus,
   RefreshCw,
   Search,
@@ -27,9 +28,12 @@ export function GameLobbyView() {
   const router = useRouter();
   const {
     availableRooms,
+    currentRoom,
+    currentSession,
     fetchAvailableRooms,
     joinRoom,
     initializeGamer,
+    getActiveSessionForRoom,
     isLoading,
     error,
     clearError,
@@ -38,6 +42,9 @@ export function GameLobbyView() {
     updateGamerProfileForm,
     closeGamerProfileModal,
     openGamerProfileModal,
+    unsubscribeFromGame,
+    subscribeToGameSession,
+    loadGameState,
     saveGamerProfile,
     isSavingGamerProfile,
     gamerProfile,
@@ -51,6 +58,8 @@ export function GameLobbyView() {
   const [inviteCode, setInviteCode] = useState("");
   const [invitePassword, setInvitePassword] = useState("");
   const [joinByCodeError, setJoinByCodeError] = useState<string | null>(null);
+  const [isResumingRoom, setIsResumingRoom] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
 
   useEffect(() => {
     // Initialize gamer first (guest or authenticated)
@@ -122,6 +131,43 @@ export function GameLobbyView() {
       router.push(`/game/room/${room.id}`);
     } catch (error) {
       console.error("Join room error:", error);
+    }
+  };
+
+  const handleResumeRoom = async () => {
+    if (!currentRoom || isResumingRoom) {
+      return;
+    }
+
+    setIsResumingRoom(true);
+    setResumeError(null);
+
+    try {
+      let sessionId = currentSession?.isActive
+        ? currentSession.id
+        : null;
+
+      if (!sessionId && currentRoom.status === "playing") {
+        sessionId = await getActiveSessionForRoom(currentRoom.id);
+      }
+
+      if (sessionId) {
+        await unsubscribeFromGame();
+        await loadGameState(sessionId);
+        await subscribeToGameSession(sessionId);
+        router.push(`/game/play/${sessionId}`);
+      } else {
+        router.push(`/game/room/${currentRoom.id}`);
+      }
+    } catch (resumeError) {
+      console.error("Resume room error:", resumeError);
+      setResumeError(
+        resumeError instanceof Error
+          ? resumeError.message
+          : "ไม่สามารถกลับเข้าสู่ห้องได้ ลองใหม่อีกครั้ง"
+      );
+    } finally {
+      setIsResumingRoom(false);
     }
   };
 
@@ -216,7 +262,7 @@ export function GameLobbyView() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="space-y-3">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                🎮 ล็อบบี้เกม
+                🎮 ล็อบบี้
               </h1>
               <p className="mt-2 text-gray-600 dark:text-gray-400">
                 เลือกห้องที่ต้องการเข้าร่วม หรือสร้างห้องใหม่
@@ -385,10 +431,65 @@ export function GameLobbyView() {
           </div>
         </div>
 
+        {currentRoom && (
+          <div className="mb-8">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 shadow-sm dark:border-blue-900 dark:bg-blue-900/20">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300">
+                    ห้องที่คุณกำลังเล่นอยู่
+                  </p>
+                  <h2 className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    {currentRoom.name}
+                  </h2>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-3 py-1 text-gray-700 shadow-sm dark:bg-white/10 dark:text-gray-200">
+                      <Users className="h-4 w-4" />
+                      {currentRoom.currentPlayerCount}/{currentRoom.maxPlayerCount} ผู้เล่น
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-3 py-1 text-gray-700 shadow-sm dark:bg-white/10 dark:text-gray-200">
+                      <Clock className="h-4 w-4" />
+                      สถานะ: {currentRoom.status === "playing" ? "กำลังเล่น" : "รอผู้เล่น"}
+                    </span>
+                    {currentRoom.settings.betAmount > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-3 py-1 text-yellow-700 shadow-sm dark:bg-yellow-900/20 dark:text-yellow-200">
+                        <Coins className="h-4 w-4" />
+                        เดิมพัน ฿{currentRoom.settings.betAmount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 md:items-end">
+                  <button
+                    onClick={handleResumeRoom}
+                    disabled={isResumingRoom}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Play className={`h-5 w-5 ${isResumingRoom ? "animate-spin" : ""}`} />
+                    {isResumingRoom
+                      ? "กำลังนำทาง..."
+                      : currentRoom.status === "playing"
+                      ? "กลับไปเล่นต่อ"
+                      : "กลับเข้าสู่ห้อง"}
+                  </button>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    กลับเข้าสู่ห้องที่คุณยังมีสิทธิ์เล่นต่อได้ทันที
+                  </p>
+                </div>
+              </div>
+            </div>
+            {resumeError && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+                {resumeError}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Error Message */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center justify-between">
-            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
             <button
               onClick={clearError}
               className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
