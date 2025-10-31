@@ -255,7 +255,7 @@ interface GameStore extends RoomState {
   fetchActiveSessionForRoom: (roomId: string) => Promise<string | null>;
   startGameSession: () => Promise<string>;
   loadGameState: (sessionId: string) => Promise<void>;
-  drawCard: (fromDeck: boolean) => Promise<void>;
+  drawCard: (fromDeck: boolean, options?: { meldCards?: string[] }) => Promise<void>;
   discardCard: (cardId: string) => Promise<void>;
   subscribeToGameSession: (sessionId: string) => Promise<void>;
   unsubscribeFromGame: () => void;
@@ -1220,19 +1220,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
   /**
    * Draw a card
    */
-  drawCard: async (fromDeck: boolean) => {
+  drawCard: async (fromDeck: boolean, options?: { meldCards?: string[] }) => {
     try {
       const { currentSession, gamerId, guestId } = get();
       if (!currentSession || !gamerId) throw new Error("ไม่พบเซสชันเกม");
 
-      const { error } = await supabase.rpc("draw_card", {
-        p_session_id: currentSession.id,
-        p_gamer_id: gamerId,
-        p_from_deck: fromDeck,
-        p_guest_identifier: guestId || undefined,
-      });
+      if (fromDeck) {
+        const { error } = await supabase.rpc("draw_card", {
+          p_session_id: currentSession.id,
+          p_gamer_id: gamerId,
+          p_guest_identifier: guestId || undefined,
+        });
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        const meldCards = options?.meldCards;
+        if (!meldCards || meldCards.length === 0) {
+          throw new Error("ต้องระบุไพ่ที่จะใช้เกิดเมื่อเก็บจากกองทิ้ง");
+        }
+
+        const { error } = await supabase.rpc("draw_discard_and_meld", {
+          p_session_id: currentSession.id,
+          p_gamer_id: gamerId,
+          p_meld_cards: meldCards,
+          p_guest_identifier: guestId || undefined,
+        });
+
+        if (error) throw error;
+      }
 
       // Reload game state
       await get().loadGameState(currentSession.id);

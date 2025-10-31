@@ -717,6 +717,15 @@ export type Database = {
           room_code: string
         }[]
       }
+      create_meld: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_meld_cards: string[]
+          p_guest_identifier?: string
+        }
+        Returns: string
+      }
       create_or_get_gamer: {
         Args: {
           p_guest_identifier?: string
@@ -745,7 +754,15 @@ export type Database = {
         Args: {
           p_session_id: string
           p_gamer_id: string
-          p_from_deck?: boolean
+          p_guest_identifier?: string
+        }
+        Returns: string
+      }
+      draw_discard_and_meld: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_meld_cards: string[]
           p_guest_identifier?: string
         }
         Returns: string

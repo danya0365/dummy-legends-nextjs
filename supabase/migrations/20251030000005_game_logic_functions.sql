@@ -170,9 +170,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- =====================================================
--- DRAW CARD
--- =====================================================
 
 CREATE OR REPLACE FUNCTION public.draw_card(
   p_session_id UUID,
@@ -263,6 +260,98 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =====================================================
+-- CREATE MELD (WITHOUT DRAW)
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.create_meld(
+  p_session_id UUID,
+  p_gamer_id UUID,
+  p_meld_cards UUID[],
+  p_guest_identifier TEXT DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+  v_can_access BOOLEAN;
+  v_current_turn UUID;
+  v_distinct_count INTEGER;
+  v_meld_id UUID := uuid_generate_v4();
+BEGIN
+  IF p_meld_cards IS NULL OR array_length(p_meld_cards, 1) < 3 THEN
+    RAISE EXCEPTION 'Meld requires at least three cards';
+  END IF;
+
+  SELECT COUNT(DISTINCT card_id) INTO v_distinct_count
+  FROM unnest(p_meld_cards) AS cards(card_id);
+
+  IF v_distinct_count <> array_length(p_meld_cards, 1) THEN
+    RAISE EXCEPTION 'Meld cards must be unique';
+  END IF;
+
+  v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
+  IF NOT v_can_access THEN
+    RAISE EXCEPTION 'Not authorized';
+  END IF;
+
+  SELECT current_turn_gamer_id INTO v_current_turn
+  FROM public.game_sessions
+  WHERE id = p_session_id AND is_active = true;
+
+  IF v_current_turn IS DISTINCT FROM p_gamer_id THEN
+    RAISE EXCEPTION 'Not your turn';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.game_cards
+    WHERE id = ANY(p_meld_cards)
+      AND session_id = p_session_id
+      AND NOT (owner_gamer_id = p_gamer_id AND location = 'hand')
+  ) THEN
+    RAISE EXCEPTION 'All meld cards must be in your hand';
+  END IF;
+
+  -- TODO: Add detailed meld validation for sets/runs according to Dummy rules
+
+  UPDATE public.game_cards
+  SET location = 'meld',
+      owner_gamer_id = p_gamer_id,
+      meld_id = v_meld_id,
+      position_in_location = NULL,
+      updated_at = NOW()
+  WHERE id = ANY(p_meld_cards)
+    AND session_id = p_session_id;
+
+  UPDATE public.game_hands
+  SET card_count = card_count - array_length(p_meld_cards, 1),
+      melds = COALESCE(melds, '[]'::jsonb) || jsonb_build_array(
+        jsonb_build_object(
+          'meld_id', v_meld_id,
+          'cards', to_jsonb(p_meld_cards),
+          'created_at', NOW()
+        )
+      ),
+      updated_at = NOW()
+  WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
+
+  INSERT INTO public.game_moves (
+    session_id,
+    gamer_id,
+    move_type,
+    move_number,
+    move_data
+  ) VALUES (
+    p_session_id,
+    p_gamer_id,
+    'meld',
+    (SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id),
+    jsonb_build_object('meld_id', v_meld_id, 'cards', p_meld_cards)
+  );
+
+  RETURN v_meld_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =====================================================
 -- DRAW FROM DISCARD AND MELD
 -- =====================================================
 
@@ -274,15 +363,23 @@ CREATE OR REPLACE FUNCTION public.draw_discard_and_meld(
 )
 RETURNS UUID AS $$
 DECLARE
-  v_card_id UUID;
+  v_discard_card_id UUID;
   v_can_access BOOLEAN;
   v_current_turn UUID;
   v_hand_count INTEGER;
-  v_session_room UUID;
+  v_distinct_count INTEGER;
   v_new_discard_top UUID;
+  v_meld_id UUID;
 BEGIN
-  IF array_length(p_meld_cards, 1) < 3 THEN
-    RAISE EXCEPTION 'Meld requires at least three cards';
+  IF p_meld_cards IS NULL OR array_length(p_meld_cards, 1) < 3 THEN
+    RAISE EXCEPTION 'Meld requires at least three cards (including discard)';
+  END IF;
+
+  SELECT COUNT(DISTINCT card_id) INTO v_distinct_count
+  FROM unnest(p_meld_cards) AS card_id;
+
+  IF v_distinct_count <> array_length(p_meld_cards, 1) THEN
+    RAISE EXCEPTION 'Meld cards must be unique';
   END IF;
 
   -- Check access
@@ -291,39 +388,42 @@ BEGIN
     RAISE EXCEPTION 'Not authorized';
   END IF;
   
-  -- Check if it's player's turn
-  SELECT current_turn_gamer_id, room_id
-  INTO v_current_turn, v_session_room
+  -- Check if it's player's turn and lock session row
+  SELECT current_turn_gamer_id
+  INTO v_current_turn
   FROM public.game_sessions
-  WHERE id = p_session_id AND is_active = true;
+  WHERE id = p_session_id AND is_active = true
+  FOR UPDATE;
   
-  IF v_current_turn != p_gamer_id THEN
+  IF v_current_turn IS DISTINCT FROM p_gamer_id THEN
     RAISE EXCEPTION 'Not your turn';
   END IF;
 
   -- Get current hand count
   SELECT card_count INTO v_hand_count
   FROM public.game_hands
-  WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
+  WHERE session_id = p_session_id AND gamer_id = p_gamer_id
+  FOR UPDATE;
 
   IF v_hand_count >= 11 THEN
     RAISE EXCEPTION 'Hand is full, must discard first';
   END IF;
 
-  -- Ensure discard pile has a top card and matches meld
-  SELECT discard_pile_top_card_id INTO v_card_id
+  -- Ensure discard pile has a top card and matches meld (lock discard state)
+  SELECT discard_pile_top_card_id INTO v_discard_card_id
   FROM public.game_sessions
-  WHERE id = p_session_id;
+  WHERE id = p_session_id
+  FOR UPDATE;
 
-  IF v_card_id IS NULL THEN
+  IF v_discard_card_id IS NULL THEN
     RAISE EXCEPTION 'Discard pile is empty';
   END IF;
 
-  IF NOT v_card_id = ANY(p_meld_cards) THEN
+  IF NOT (v_discard_card_id = ANY(p_meld_cards)) THEN
     RAISE EXCEPTION 'Meld must include discard top card';
   END IF;
 
-  -- Basic validation: ensure player holds remaining meld cards
+  -- Ensure player holds remaining meld cards in hand
   IF EXISTS (
     SELECT 1
     FROM unnest(p_meld_cards) AS meld_card
@@ -331,43 +431,38 @@ BEGIN
       SELECT 1
       FROM public.game_cards
       WHERE id = meld_card
-        AND (
-          (id = v_card_id AND location = 'discard')
-          OR (location = 'hand' AND owner_gamer_id = p_gamer_id)
-        )
         AND session_id = p_session_id
+        AND (
+          (id = v_discard_card_id AND location = 'discard')
+          OR (id <> v_discard_card_id AND location = 'hand' AND owner_gamer_id = p_gamer_id)
+        )
     )
   ) THEN
     RAISE EXCEPTION 'Meld contains cards not accessible to player';
   END IF;
 
-  -- Move discard top card to hand temporarily
+  -- Move discard top card to player's hand
   UPDATE public.game_cards
   SET location = 'hand',
       owner_gamer_id = p_gamer_id,
-      position_in_location = v_hand_count
-  WHERE id = v_card_id;
+      position_in_location = v_hand_count,
+      updated_at = NOW()
+  WHERE id = v_discard_card_id
+    AND session_id = p_session_id;
 
-  -- Update hand count after taking discard card
+  -- Update hand count after drawing discard card
   UPDATE public.game_hands
   SET card_count = card_count + 1,
       updated_at = NOW()
   WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
 
-  -- TODO: Actual meld validation (runs/sets) and persistence should be implemented here
-
-  -- Remove cards used in meld from hand (placeholder: mark as in meld)
-  UPDATE public.game_cards
-  SET location = 'meld',
-      owner_gamer_id = p_gamer_id
-  WHERE id = ANY(p_meld_cards)
-    AND session_id = p_session_id;
-
-  -- Decrease hand count by meld card count
-  UPDATE public.game_hands
-  SET card_count = card_count - array_length(p_meld_cards, 1),
-      updated_at = NOW()
-  WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
+  -- Create meld (reuses create_meld logic)
+  v_meld_id := public.create_meld(
+    p_session_id => p_session_id,
+    p_gamer_id => p_gamer_id,
+    p_meld_cards => p_meld_cards,
+    p_guest_identifier => p_guest_identifier
+  );
 
   -- Reindex discard pile and update top card
   WITH reordered AS (
@@ -406,12 +501,13 @@ BEGIN
     'draw_discard',
     (SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id),
     jsonb_build_object(
-      'card_id', v_card_id,
+      'card_id', v_discard_card_id,
+      'meld_id', v_meld_id,
       'meld_cards', p_meld_cards
     )
   );
 
-  RETURN v_card_id;
+  RETURN v_discard_card_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

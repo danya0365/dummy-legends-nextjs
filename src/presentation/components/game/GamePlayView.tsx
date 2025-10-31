@@ -28,6 +28,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
 
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [hasDrawn, setHasDrawn] = useState(false);
+  const [pendingMeldCardIds, setPendingMeldCardIds] = useState<string[]>([]);
 
   useEffect(() => {
     // Load game state
@@ -52,8 +53,17 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const handleDrawFromDiscard = async () => {
     if (hasDrawn || !isMyTurn) return;
     try {
-      await drawCard(false);
+      if (pendingMeldCardIds.length === 0) {
+        throw new Error("ต้องเลือกไพ่ที่จะใช้เกิดก่อนเก็บจากกองทิ้ง");
+      }
+
+      const meldCards = discardTop
+        ? Array.from(new Set([discardTop.id, ...pendingMeldCardIds]))
+        : pendingMeldCardIds;
+
+      await drawCard(false, { meldCards });
       setHasDrawn(true);
+      setPendingMeldCardIds([]);
     } catch (error) {
       console.error("Draw from discard error:", error);
     }
