@@ -47,20 +47,19 @@ export function PlayingCard({
     }
   };
 
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`
-        ${getSizeClasses()}
-        bg-white border-2 rounded-lg shadow-md
-        flex flex-col items-center justify-between p-1
-        transition-all duration-200
-        ${selected ? "border-blue-500 -translate-y-2 shadow-xl" : "border-gray-300"}
-        ${onClick && !disabled ? "hover:-translate-y-1 hover:shadow-lg cursor-pointer" : ""}
-        ${disabled ? "opacity-50 cursor-not-allowed" : ""}
-      `}
-    >
+  const isInteractive = typeof onClick === "function";
+  const containerClasses = `
+    ${getSizeClasses()}
+    bg-white border-2 rounded-lg shadow-md
+    flex flex-col items-center justify-between p-1
+    transition-all duration-200
+    ${selected ? "border-blue-500 -translate-y-2 shadow-xl" : "border-gray-300"}
+    ${isInteractive && !disabled ? "hover:-translate-y-1 hover:shadow-lg cursor-pointer" : ""}
+    ${disabled ? "opacity-50 cursor-not-allowed" : ""}
+  `;
+
+  const content = (
+    <>
       {/* Top corner */}
       <div className={`flex flex-col items-center ${getSuitColor(card.suit)}`}>
         <div className="font-bold">{card.rank}</div>
@@ -77,7 +76,26 @@ export function PlayingCard({
         <div className="font-bold">{card.rank}</div>
         <div className="text-sm">{getSuitSymbol(card.suit)}</div>
       </div>
-    </button>
+    </>
+  );
+
+  if (isInteractive) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className={containerClasses}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className={containerClasses} aria-disabled={disabled}>
+      {content}
+    </div>
   );
 }
 
