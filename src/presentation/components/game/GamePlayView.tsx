@@ -19,6 +19,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     otherPlayers,
     gamerId,
     loadGameState,
+    subscribeToGameSession,
     drawCard,
     discardCard,
     createMeld,
@@ -37,14 +38,30 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const [guidanceMessage, setGuidanceMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load game state
-    loadGameState(sessionId);
+    let isActive = true;
+
+    const initializeGame = async () => {
+      try {
+        await loadGameState(sessionId);
+
+        if (!isActive) {
+          return;
+        }
+
+        await subscribeToGameSession(sessionId);
+      } catch (initError) {
+        console.error("Failed to initialize gameplay session:", initError);
+      }
+    };
+
+    initializeGame();
 
     // Cleanup on unmount
     return () => {
+      isActive = false;
       unsubscribeFromGame();
     };
-  }, [sessionId, loadGameState, unsubscribeFromGame]);
+  }, [sessionId, loadGameState, subscribeToGameSession, unsubscribeFromGame]);
 
   useEffect(() => {
     if (!isSelectingMeld) {
