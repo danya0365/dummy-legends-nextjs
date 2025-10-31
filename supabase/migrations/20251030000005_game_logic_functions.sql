@@ -186,6 +186,8 @@ DECLARE
   v_can_access BOOLEAN;
   v_current_turn UUID;
   v_hand_count INTEGER;
+  v_move_type public.game_move_type;
+  v_new_discard_top UUID;
 BEGIN
   -- Check access
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
@@ -212,28 +214,32 @@ BEGIN
   END IF;
   
   IF p_from_deck THEN
+    v_move_type := 'draw_deck';
+
     -- Draw from deck
     SELECT id INTO v_card_id
     FROM public.game_cards
     WHERE session_id = p_session_id
-    AND location = 'deck'
+      AND location = 'deck'
     ORDER BY position_in_location
     LIMIT 1;
-    
+
     IF v_card_id IS NULL THEN
       RAISE EXCEPTION 'Deck is empty';
     END IF;
-    
+
     -- Update remaining deck cards
     UPDATE public.game_sessions
     SET remaining_deck_cards = remaining_deck_cards - 1
     WHERE id = p_session_id;
   ELSE
-    -- Draw from discard pile
+    v_move_type := 'draw_discard';
+
+    -- Draw from discard pile (top card only)
     SELECT discard_pile_top_card_id INTO v_card_id
     FROM public.game_sessions
     WHERE id = p_session_id;
-    
+
     IF v_card_id IS NULL THEN
       RAISE EXCEPTION 'Discard pile is empty';
     END IF;
@@ -251,6 +257,32 @@ BEGIN
   SET card_count = card_count + 1,
       updated_at = NOW()
   WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
+
+  -- Reindex discard pile and update top card when drawing from discard
+  IF v_move_type = 'draw_discard' THEN
+    WITH reordered AS (
+      SELECT id,
+             ROW_NUMBER() OVER (ORDER BY position_in_location, id) - 1 AS new_position
+      FROM public.game_cards
+      WHERE session_id = p_session_id
+        AND location = 'discard'
+    )
+    UPDATE public.game_cards gc
+    SET position_in_location = reordered.new_position
+    FROM reordered
+    WHERE gc.id = reordered.id;
+
+    SELECT id INTO v_new_discard_top
+    FROM public.game_cards
+    WHERE session_id = p_session_id
+      AND location = 'discard'
+    ORDER BY position_in_location
+    LIMIT 1;
+
+    UPDATE public.game_sessions
+    SET discard_pile_top_card_id = v_new_discard_top
+    WHERE id = p_session_id;
+  END IF;
   
   -- Record move
   INSERT INTO public.game_moves (
@@ -262,7 +294,7 @@ BEGIN
   ) VALUES (
     p_session_id,
     p_gamer_id,
-    'draw',
+    v_move_type,
     (SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id),
     jsonb_build_object(
       'card_id', v_card_id,
