@@ -177,7 +177,6 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.draw_card(
   p_session_id UUID,
   p_gamer_id UUID,
-  p_from_deck BOOLEAN DEFAULT true,
   p_guest_identifier TEXT DEFAULT NULL
 )
 RETURNS UUID AS $$
@@ -186,8 +185,6 @@ DECLARE
   v_can_access BOOLEAN;
   v_current_turn UUID;
   v_hand_count INTEGER;
-  v_move_type public.game_move_type;
-  v_new_discard_top UUID;
 BEGIN
   -- Check access
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
@@ -213,37 +210,22 @@ BEGIN
     RAISE EXCEPTION 'Hand is full, must discard first';
   END IF;
   
-  IF p_from_deck THEN
-    v_move_type := 'draw_deck';
+  -- Draw from deck
+  SELECT id INTO v_card_id
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND location = 'deck'
+  ORDER BY position_in_location
+  LIMIT 1;
 
-    -- Draw from deck
-    SELECT id INTO v_card_id
-    FROM public.game_cards
-    WHERE session_id = p_session_id
-      AND location = 'deck'
-    ORDER BY position_in_location
-    LIMIT 1;
-
-    IF v_card_id IS NULL THEN
-      RAISE EXCEPTION 'Deck is empty';
-    END IF;
-
-    -- Update remaining deck cards
-    UPDATE public.game_sessions
-    SET remaining_deck_cards = remaining_deck_cards - 1
-    WHERE id = p_session_id;
-  ELSE
-    v_move_type := 'draw_discard';
-
-    -- Draw from discard pile (top card only)
-    SELECT discard_pile_top_card_id INTO v_card_id
-    FROM public.game_sessions
-    WHERE id = p_session_id;
-
-    IF v_card_id IS NULL THEN
-      RAISE EXCEPTION 'Discard pile is empty';
-    END IF;
+  IF v_card_id IS NULL THEN
+    RAISE EXCEPTION 'Deck is empty';
   END IF;
+
+  -- Update remaining deck cards
+  UPDATE public.game_sessions
+  SET remaining_deck_cards = remaining_deck_cards - 1
+  WHERE id = p_session_id;
   
   -- Move card to player's hand
   UPDATE public.game_cards
@@ -258,32 +240,6 @@ BEGIN
       updated_at = NOW()
   WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
 
-  -- Reindex discard pile and update top card when drawing from discard
-  IF v_move_type = 'draw_discard' THEN
-    WITH reordered AS (
-      SELECT id,
-             ROW_NUMBER() OVER (ORDER BY position_in_location, id) - 1 AS new_position
-      FROM public.game_cards
-      WHERE session_id = p_session_id
-        AND location = 'discard'
-    )
-    UPDATE public.game_cards gc
-    SET position_in_location = reordered.new_position
-    FROM reordered
-    WHERE gc.id = reordered.id;
-
-    SELECT id INTO v_new_discard_top
-    FROM public.game_cards
-    WHERE session_id = p_session_id
-      AND location = 'discard'
-    ORDER BY position_in_location
-    LIMIT 1;
-
-    UPDATE public.game_sessions
-    SET discard_pile_top_card_id = v_new_discard_top
-    WHERE id = p_session_id;
-  END IF;
-  
   -- Record move
   INSERT INTO public.game_moves (
     session_id,
@@ -294,14 +250,167 @@ BEGIN
   ) VALUES (
     p_session_id,
     p_gamer_id,
-    v_move_type,
+    'draw_deck',
     (SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id),
     jsonb_build_object(
       'card_id', v_card_id,
-      'from_deck', p_from_deck
+      'from_deck', true
     )
   );
   
+  RETURN v_card_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =====================================================
+-- DRAW FROM DISCARD AND MELD
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.draw_discard_and_meld(
+  p_session_id UUID,
+  p_gamer_id UUID,
+  p_meld_cards UUID[],
+  p_guest_identifier TEXT DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+  v_card_id UUID;
+  v_can_access BOOLEAN;
+  v_current_turn UUID;
+  v_hand_count INTEGER;
+  v_session_room UUID;
+  v_new_discard_top UUID;
+BEGIN
+  IF array_length(p_meld_cards, 1) < 3 THEN
+    RAISE EXCEPTION 'Meld requires at least three cards';
+  END IF;
+
+  -- Check access
+  v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
+  IF NOT v_can_access THEN
+    RAISE EXCEPTION 'Not authorized';
+  END IF;
+  
+  -- Check if it's player's turn
+  SELECT current_turn_gamer_id, room_id
+  INTO v_current_turn, v_session_room
+  FROM public.game_sessions
+  WHERE id = p_session_id AND is_active = true;
+  
+  IF v_current_turn != p_gamer_id THEN
+    RAISE EXCEPTION 'Not your turn';
+  END IF;
+
+  -- Get current hand count
+  SELECT card_count INTO v_hand_count
+  FROM public.game_hands
+  WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
+
+  IF v_hand_count >= 11 THEN
+    RAISE EXCEPTION 'Hand is full, must discard first';
+  END IF;
+
+  -- Ensure discard pile has a top card and matches meld
+  SELECT discard_pile_top_card_id INTO v_card_id
+  FROM public.game_sessions
+  WHERE id = p_session_id;
+
+  IF v_card_id IS NULL THEN
+    RAISE EXCEPTION 'Discard pile is empty';
+  END IF;
+
+  IF NOT v_card_id = ANY(p_meld_cards) THEN
+    RAISE EXCEPTION 'Meld must include discard top card';
+  END IF;
+
+  -- Basic validation: ensure player holds remaining meld cards
+  IF EXISTS (
+    SELECT 1
+    FROM unnest(p_meld_cards) AS meld_card
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM public.game_cards
+      WHERE id = meld_card
+        AND (
+          (id = v_card_id AND location = 'discard')
+          OR (location = 'hand' AND owner_gamer_id = p_gamer_id)
+        )
+        AND session_id = p_session_id
+    )
+  ) THEN
+    RAISE EXCEPTION 'Meld contains cards not accessible to player';
+  END IF;
+
+  -- Move discard top card to hand temporarily
+  UPDATE public.game_cards
+  SET location = 'hand',
+      owner_gamer_id = p_gamer_id,
+      position_in_location = v_hand_count
+  WHERE id = v_card_id;
+
+  -- Update hand count after taking discard card
+  UPDATE public.game_hands
+  SET card_count = card_count + 1,
+      updated_at = NOW()
+  WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
+
+  -- TODO: Actual meld validation (runs/sets) and persistence should be implemented here
+
+  -- Remove cards used in meld from hand (placeholder: mark as in meld)
+  UPDATE public.game_cards
+  SET location = 'meld',
+      owner_gamer_id = p_gamer_id
+  WHERE id = ANY(p_meld_cards)
+    AND session_id = p_session_id;
+
+  -- Decrease hand count by meld card count
+  UPDATE public.game_hands
+  SET card_count = card_count - array_length(p_meld_cards, 1),
+      updated_at = NOW()
+  WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
+
+  -- Reindex discard pile and update top card
+  WITH reordered AS (
+    SELECT id,
+           ROW_NUMBER() OVER (ORDER BY position_in_location, id) - 1 AS new_position
+    FROM public.game_cards
+    WHERE session_id = p_session_id
+      AND location = 'discard'
+  )
+  UPDATE public.game_cards gc
+  SET position_in_location = reordered.new_position
+  FROM reordered
+  WHERE gc.id = reordered.id;
+
+  SELECT id INTO v_new_discard_top
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND location = 'discard'
+  ORDER BY position_in_location
+  LIMIT 1;
+
+  UPDATE public.game_sessions
+  SET discard_pile_top_card_id = v_new_discard_top
+  WHERE id = p_session_id;
+
+  -- Record move
+  INSERT INTO public.game_moves (
+    session_id,
+    gamer_id,
+    move_type,
+    move_number,
+    move_data
+  ) VALUES (
+    p_session_id,
+    p_gamer_id,
+    'draw_discard',
+    (SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id),
+    jsonb_build_object(
+      'card_id', v_card_id,
+      'meld_cards', p_meld_cards
+    )
+  );
+
   RETURN v_card_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
