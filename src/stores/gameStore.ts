@@ -82,8 +82,14 @@ const parseRoomDetails = (payload: unknown): RoomDetailsContent => {
   return payload;
 };
 
-const parseGamerPreferences = (preferences: unknown): Record<string, unknown> => {
-  if (preferences && typeof preferences === "object" && !Array.isArray(preferences)) {
+const parseGamerPreferences = (
+  preferences: unknown
+): Record<string, unknown> => {
+  if (
+    preferences &&
+    typeof preferences === "object" &&
+    !Array.isArray(preferences)
+  ) {
     return preferences as Record<string, unknown>;
   }
 
@@ -148,7 +154,10 @@ interface GamerProfileFormState {
 const mapRoomPlayer = (player: RoomPlayerDetails): Player => {
   const gamer = player.gamer;
   const preferences = parseGamerPreferences(gamer.preferences);
-  const preferenceDisplayName = getPreferenceString(preferences, "display_name");
+  const preferenceDisplayName = getPreferenceString(
+    preferences,
+    "display_name"
+  );
   const preferenceAvatarUrl = getPreferenceString(preferences, "avatar_url");
 
   const fallbackUsername =
@@ -243,7 +252,7 @@ interface GameStore extends RoomState {
   startGame: () => Promise<void>;
   fetchAvailableRooms: () => Promise<void>;
   subscribeToRoom: (roomId: string) => Promise<void>;
-  unsubscribeFromRoom: () => void;
+  unsubscribeFromRoom: () => Promise<void>;
   updateRoomStatus: (status: RoomStatus) => void;
   addPlayer: (player: Player) => void;
   removePlayer: (playerId: string) => void;
@@ -252,21 +261,27 @@ interface GameStore extends RoomState {
   clearError: () => void;
   openGamerProfileModal: () => void;
   closeGamerProfileModal: () => void;
-  updateGamerProfileForm: (field: keyof GamerProfileFormState, value: string) => void;
+  updateGamerProfileForm: (
+    field: keyof GamerProfileFormState,
+    value: string
+  ) => void;
   saveGamerProfile: () => Promise<void>;
 
   // Actions - Gameplay
   fetchActiveSessionForRoom: (roomId: string) => Promise<string | null>;
   startGameSession: () => Promise<string>;
   loadGameState: (sessionId: string) => Promise<void>;
-  drawCard: (fromDeck: boolean, options?: { meldCards?: string[] }) => Promise<void>;
+  drawCard: (
+    fromDeck: boolean,
+    options?: { meldCards?: string[] }
+  ) => Promise<void>;
   createMeld: (cardIds?: string[]) => Promise<string>;
   startMeldSelection: () => void;
   cancelMeldSelection: () => void;
   toggleMeldCard: (cardId: string) => void;
   discardCard: (cardId: string) => Promise<void>;
   subscribeToGameSession: (sessionId: string) => Promise<void>;
-  unsubscribeFromGame: () => void;
+  unsubscribeFromGame: () => Promise<void>;
   getActiveSessionForRoom: (roomId: string) => Promise<string | null>;
 }
 
@@ -372,7 +387,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       if (user) {
         try {
-          const { data: profileData } = await supabase.rpc("get_active_profile");
+          const { data: profileData } = await supabase.rpc(
+            "get_active_profile"
+          );
           if (Array.isArray(profileData) && profileData.length > 0) {
             activeProfile = profileData[0] ?? null;
           }
@@ -381,7 +398,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-      const userMetadata = (user?.user_metadata ?? {}) as Record<string, unknown>;
+      const userMetadata = (user?.user_metadata ?? {}) as Record<
+        string,
+        unknown
+      >;
 
       const fallbackDisplayName =
         pickFirstNonEmptyString(
@@ -637,7 +657,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       if (error) throw error;
 
-      const latest = latestRooms && latestRooms.length > 0 ? latestRooms[0] : null;
+      const latest =
+        latestRooms && latestRooms.length > 0 ? latestRooms[0] : null;
       if (!latest?.room_id) {
         return null;
       }
@@ -660,7 +681,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       await get().subscribeToRoom(room.id);
 
-      const { unsubscribeFromGame, loadGameState, subscribeToGameSession } = get();
+      const { unsubscribeFromGame, loadGameState, subscribeToGameSession } =
+        get();
 
       await unsubscribeFromGame();
 
@@ -698,13 +720,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const resolvedGamerId = get().gamerId!;
       const resolvedGuestId = get().guestId;
 
-      const { data: joinedRoomId, error } = await supabase.rpc("join_game_room", {
-        p_gamer_id: resolvedGamerId,
-        p_guest_identifier: resolvedGuestId || undefined,
-        p_room_code: data.roomCode || undefined,
-        p_room_id: data.roomId || undefined,
-        p_room_password: data.password || undefined,
-      });
+      const { data: joinedRoomId, error } = await supabase.rpc(
+        "join_game_room",
+        {
+          p_gamer_id: resolvedGamerId,
+          p_guest_identifier: resolvedGuestId || undefined,
+          p_room_code: data.roomCode || undefined,
+          p_room_id: data.roomId || undefined,
+          p_room_password: data.password || undefined,
+        }
+      );
 
       if (error) throw error;
       if (!joinedRoomId) throw new Error("Failed to join room");
@@ -729,7 +754,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Subscribe to room updates
       await get().subscribeToRoom(joinedRoomId);
 
-      const { unsubscribeFromGame, loadGameState, subscribeToGameSession } = get();
+      const { unsubscribeFromGame, loadGameState, subscribeToGameSession } =
+        get();
       await unsubscribeFromGame();
 
       if (room.status === "playing") {
@@ -1043,7 +1069,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
    */
   getActiveSessionForRoom: async (roomId: string) => {
     const { currentSession } = get();
-    if (currentSession && currentSession.roomId === roomId && currentSession.isActive) {
+    if (
+      currentSession &&
+      currentSession.roomId === roomId &&
+      currentSession.isActive
+    ) {
       return currentSession.id;
     }
 
@@ -1122,10 +1152,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   /**
    * Unsubscribe from room updates
    */
-  unsubscribeFromRoom: () => {
+  unsubscribeFromRoom: async () => {
     const { roomChannel } = get();
     if (roomChannel) {
-      supabase.removeChannel(roomChannel);
+      await supabase.removeChannel(roomChannel);
       set({ roomChannel: null });
     }
   },
@@ -1400,7 +1430,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           get().loadGameState(sessionId);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("Game session subscription response:", status);
+      });
 
     set({ gameChannel: channel });
   },
@@ -1408,10 +1440,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   /**
    * Unsubscribe from game session
    */
-  unsubscribeFromGame: () => {
+  unsubscribeFromGame: async () => {
     const { gameChannel } = get();
     if (gameChannel) {
-      supabase.removeChannel(gameChannel);
+      await supabase.removeChannel(gameChannel);
       set({ gameChannel: null });
     }
   },
