@@ -1,6 +1,6 @@
-import { GamePlayView } from "@/src/presentation/components/game/GamePlayView";
 import { MainLayout } from "@/src/presentation/components/layout";
 import type { Metadata } from "next";
+import ClientGamePlayView from "./ClientGamePlayView";
 
 export const metadata: Metadata = {
   title: "กำลังเล่นเกม | Dummy Legends",
@@ -16,11 +16,11 @@ interface GamePlayPageProps {
  * Main gameplay screen
  */
 export default async function GamePlayPage({ params }: GamePlayPageProps) {
-  const resolvedParams = await params;
+  const { sessionId } = await params;
 
   return (
     <MainLayout>
-      <GamePlayView sessionId={resolvedParams.sessionId} />
+      <ClientGamePlayView sessionId={sessionId} />
     </MainLayout>
   );
 }
