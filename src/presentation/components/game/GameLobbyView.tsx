@@ -33,6 +33,7 @@ export function GameLobbyView() {
     fetchAvailableRooms,
     joinRoom,
     initializeGamer,
+    loadLatestRoomContext,
     getActiveSessionForRoom,
     isLoading,
     error,
@@ -63,10 +64,26 @@ export function GameLobbyView() {
 
   useEffect(() => {
     // Initialize gamer first (guest or authenticated)
-    initializeGamer().then(() => {
-      fetchAvailableRooms();
-    });
-  }, [initializeGamer, fetchAvailableRooms]);
+    let isMounted = true;
+
+    const bootstrap = async () => {
+      await initializeGamer();
+
+      if (!isMounted) return;
+
+      await loadLatestRoomContext();
+
+      if (!isMounted) return;
+
+      await fetchAvailableRooms();
+    };
+
+    bootstrap();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initializeGamer, loadLatestRoomContext, fetchAvailableRooms]);
 
   const pendingProfileNotice = useMemo(() => {
     if (isGamerProfileModalOpen) return true;

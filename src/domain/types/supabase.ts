@@ -829,6 +829,17 @@ export type Database = {
         }
         Returns: Json
       }
+      get_latest_room_for_gamer: {
+        Args: { p_gamer_id: string; p_guest_identifier?: string }
+        Returns: {
+          room_id: string
+          session_id: string
+          room_status: Database["public"]["Enums"]["room_status"]
+          session_status: string
+          last_joined_at: string
+          last_active_at: string
+        }[]
+      }
       get_paginated_users: {
         Args: { p_page?: number; p_limit?: number }
         Returns: Json

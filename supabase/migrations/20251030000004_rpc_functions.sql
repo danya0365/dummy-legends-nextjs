@@ -311,6 +311,84 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Get latest accessible room for gamer (current or recent)
+CREATE OR REPLACE FUNCTION public.get_latest_room_for_gamer(
+  p_gamer_id UUID,
+  p_guest_identifier TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  room_id UUID,
+  session_id UUID,
+  room_status public.room_status,
+  session_status TEXT,
+  last_joined_at TIMESTAMP WITH TIME ZONE,
+  last_active_at TIMESTAMP WITH TIME ZONE
+) AS $$
+DECLARE
+  v_can_access BOOLEAN;
+BEGIN
+  v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
+  IF NOT v_can_access THEN
+    RAISE EXCEPTION 'Not authorized';
+  END IF;
+
+  RETURN QUERY
+  WITH player_rooms AS (
+    SELECT
+      rp.room_id,
+      rp.joined_at,
+      rp.left_at,
+      gr.status AS room_status,
+      gr.created_at,
+      gr.started_at,
+      gr.finished_at
+    FROM public.room_players rp
+    JOIN public.game_rooms gr ON gr.id = rp.room_id
+    WHERE rp.gamer_id = p_gamer_id
+      AND (rp.left_at IS NULL OR gr.status IN ('waiting', 'ready', 'playing'))
+  ),
+  recent_rooms AS (
+    SELECT DISTINCT ON (pr.room_id)
+      pr.room_id,
+      pr.joined_at,
+      pr.left_at,
+      pr.room_status,
+      GREATEST(
+        COALESCE(pr.left_at, to_timestamp(0)),
+        COALESCE(pr.joined_at, to_timestamp(0)),
+        COALESCE(pr.started_at, to_timestamp(0)),
+        COALESCE(pr.finished_at, to_timestamp(0)),
+        COALESCE(pr.created_at, to_timestamp(0))
+      ) AS last_active_at
+    FROM player_rooms pr
+    ORDER BY pr.room_id, pr.joined_at DESC
+  )
+  SELECT
+    rr.room_id,
+    gs.id AS session_id,
+    rr.room_status,
+    CASE
+      WHEN gs.is_active THEN 'active'
+      WHEN gs.finished_at IS NOT NULL THEN 'completed'
+      ELSE NULL
+    END AS session_status,
+    rr.joined_at AS last_joined_at,
+    rr.last_active_at
+  FROM recent_rooms rr
+  LEFT JOIN public.game_sessions gs
+    ON gs.room_id = rr.room_id
+   AND gs.is_active = true
+  ORDER BY
+    CASE
+      WHEN rr.left_at IS NULL AND rr.room_status IN ('waiting', 'ready', 'playing') THEN 0
+      ELSE 1
+    END,
+    rr.last_active_at DESC NULLS LAST,
+    rr.joined_at DESC
+  LIMIT 1;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Toggle ready status
 CREATE OR REPLACE FUNCTION public.toggle_ready_status(
   p_gamer_id UUID,

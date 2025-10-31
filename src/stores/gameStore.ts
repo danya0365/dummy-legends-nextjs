@@ -234,6 +234,7 @@ interface GameStore extends RoomState {
   createRoom: (data: CreateRoomData) => Promise<GameRoom>;
   joinRoom: (data: JoinRoomData) => Promise<string>;
   leaveRoom: () => Promise<void>;
+  loadLatestRoomContext: () => Promise<GameRoom | null>;
   toggleReady: () => void;
   startGame: () => Promise<void>;
   fetchAvailableRooms: () => Promise<void>;
@@ -596,6 +597,79 @@ export const useGameStore = create<GameStore>((set, get) => ({
         isLoading: false,
       });
       throw error;
+    }
+  },
+
+  /**
+   * Load latest accessible room for gamer (current or most recent)
+   */
+  loadLatestRoomContext: async () => {
+    try {
+      const { gamerId } = get();
+      if (!gamerId) {
+        await get().initializeGamer();
+      }
+
+      const resolvedGamerId = get().gamerId;
+      if (!resolvedGamerId) {
+        return null;
+      }
+
+      const resolvedGuestId = get().guestId;
+
+      const { data: latestRooms, error } = await supabase.rpc(
+        "get_latest_room_for_gamer",
+        {
+          p_gamer_id: resolvedGamerId,
+          p_guest_identifier: resolvedGuestId || undefined,
+        }
+      );
+
+      if (error) throw error;
+
+      const latest = latestRooms && latestRooms.length > 0 ? latestRooms[0] : null;
+      if (!latest?.room_id) {
+        return null;
+      }
+
+      const { data: roomDetails, error: detailsError } = await supabase.rpc(
+        "get_room_details",
+        { p_room_id: latest.room_id }
+      );
+
+      if (detailsError) throw detailsError;
+      if (!roomDetails) return null;
+
+      const details = parseRoomDetails(roomDetails);
+      const room = mapRoomDetailsToGameRoom(details);
+
+      set({
+        currentRoom: room,
+        isInRoom: true,
+      });
+
+      await get().subscribeToRoom(room.id);
+
+      const { unsubscribeFromGame, loadGameState, subscribeToGameSession } = get();
+
+      await unsubscribeFromGame();
+
+      if (latest.session_id) {
+        await loadGameState(latest.session_id);
+        await subscribeToGameSession(latest.session_id);
+      } else {
+        set({
+          currentSession: null,
+          myHand: [],
+          discardTop: null,
+          otherPlayers: [],
+        });
+      }
+
+      return room;
+    } catch (error) {
+      console.warn("Failed to load latest room context:", error);
+      return null;
     }
   },
 
