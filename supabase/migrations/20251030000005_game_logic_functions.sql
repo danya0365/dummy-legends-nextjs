@@ -203,9 +203,11 @@ BEGIN
   FROM public.game_hands
   WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
   
-  IF v_hand_count >= 11 THEN
-    RAISE EXCEPTION 'Hand is full, must discard first';
-  END IF;
+  -- IF v_hand_count >= 11 THEN
+  --   RAISE EXCEPTION 'Hand is full, must discard first';
+  -- END IF;
+  --
+  -- Commented out hand count check to allow drawing from discard when hand is full
   
   -- Draw from deck
   SELECT id INTO v_card_id
@@ -405,9 +407,11 @@ BEGIN
   WHERE session_id = p_session_id AND gamer_id = p_gamer_id
   FOR UPDATE;
 
-  IF v_hand_count >= 11 THEN
-    RAISE EXCEPTION 'Hand is full, must discard first';
-  END IF;
+  -- IF v_hand_count >= 11 THEN
+  --   RAISE EXCEPTION 'Hand is full, must discard first';
+  -- END IF;
+  --
+  -- Commented out hand count check to allow drawing from discard when hand is full
 
   -- Ensure discard pile has a top card and matches meld (lock discard state)
   SELECT discard_pile_top_card_id INTO v_discard_card_id
