@@ -34,6 +34,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
 
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [hasDrawn, setHasDrawn] = useState(false);
+  const [guidanceMessage, setGuidanceMessage] = useState<string | null>(null);
 
   useEffect(() => {
     // Load game state
@@ -45,13 +46,30 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     };
   }, [sessionId, loadGameState, unsubscribeFromGame]);
 
+  useEffect(() => {
+    if (!isSelectingMeld) {
+      return;
+    }
+
+    if (pendingMeldCardIds.length === 0) {
+      setGuidanceMessage("เริ่มเลือกไพ่ในมือเพื่อเกิดอย่างน้อย 3 ใบ");
+    } else if (pendingMeldCardIds.length < 3) {
+      const remaining = 3 - pendingMeldCardIds.length;
+      setGuidanceMessage(`เลือกเพิ่มอีก ${remaining} ใบเพื่อให้ครบก่อนกดเกิดไพ่`);
+    } else {
+      setGuidanceMessage("ครบแล้ว! กดปุ่ม \"เกิดไพ่\" ได้เลย");
+    }
+  }, [isSelectingMeld, pendingMeldCardIds]);
+
   const handleDrawFromDeck = async () => {
     if (hasDrawn || !isMyTurn) return;
     try {
       await drawCard(true);
       setHasDrawn(true);
+      setGuidanceMessage("เลือกไพ่ที่จะทิ้งเพื่อจบเทิร์น");
     } catch (error) {
       console.error("Draw from deck error:", error);
+      setGuidanceMessage("จั่วไพ่ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     }
   };
 
@@ -59,7 +77,13 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     if (hasDrawn || !isMyTurn) return;
     try {
       if (pendingMeldCardIds.length === 0) {
-        throw new Error("ต้องเลือกไพ่ที่จะใช้เกิดก่อนเก็บจากกองทิ้ง");
+        if (!isSelectingMeld) {
+          startMeldSelection();
+        }
+        setGuidanceMessage(
+          "เลือกไพ่ในมืออย่างน้อย 2 ใบเพื่อรวมกับไพ่กองทิ้ง แล้วกดเกิดไพ่"
+        );
+        return;
       }
 
       const meldCards = discardTop
@@ -68,8 +92,10 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
 
       await drawCard(false, { meldCards });
       setHasDrawn(true);
+      setGuidanceMessage("เลือกไพ่ที่จะทิ้งเพื่อจบเทิร์น");
     } catch (error) {
       console.error("Draw from discard error:", error);
+      setGuidanceMessage("ไม่สามารถเก็บไพ่จากกองทิ้งได้ กรุณาลองใหม่");
     }
   };
 
@@ -86,18 +112,22 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const handleStartMeldSelection = () => {
     if (!isMyTurn) return;
     startMeldSelection();
+    setGuidanceMessage("เลือกไพ่ในมืออย่างน้อย 3 ใบเพื่อกด \"เกิดไพ่\"");
   };
 
   const handleCancelMeldSelection = () => {
     cancelMeldSelection();
+    setGuidanceMessage(null);
   };
 
   const handleConfirmMeld = async () => {
     if (pendingMeldCardIds.length < 3) return;
     try {
       await createMeld();
+      setGuidanceMessage("ไพ่เกิดแล้ว จั่วหรือทิ้งตามลำดับเทิร์น");
     } catch (error) {
       console.error("Create meld error:", error);
+      setGuidanceMessage("ไม่สามารถเกิดไพ่ได้ กรุณาลองใหม่");
     }
   };
 
@@ -110,8 +140,10 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
       await discardCard(selectedCardId);
       setSelectedCardId(null);
       setHasDrawn(false);
+      setGuidanceMessage(null);
     } catch (error) {
       console.error("Discard error:", error);
+      setGuidanceMessage("ทิ้งไพ่ไม่สำเร็จ กรุณาลองใหม่");
     }
   };
 
@@ -350,6 +382,14 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
               />
             ))}
           </div>
+
+          {guidanceMessage && (
+            <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-200 text-center">
+                {guidanceMessage}
+              </p>
+            </div>
+          )}
 
           {isSelectingMeld && (
             <p className="text-center text-sm text-emerald-700 dark:text-emerald-300 mt-4">
