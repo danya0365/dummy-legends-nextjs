@@ -700,6 +700,17 @@ export type Database = {
         Args: { p_gamer_id: string; p_guest_identifier?: string }
         Returns: boolean
       }
+      compute_thai_dummy_deadwood: {
+        Args: { p_session_id: string; p_gamer_id: string }
+        Returns: {
+          card_id: string
+          score: number
+        }[]
+      }
+      compute_thai_dummy_scores: {
+        Args: { p_session_id: string }
+        Returns: Json
+      }
       create_game_room: {
         Args: {
           p_gamer_id: string
@@ -852,6 +863,10 @@ export type Database = {
           created_at: string
         }[]
       }
+      get_card_rank_order: {
+        Args: { p_rank: Database["public"]["Enums"]["card_rank"] }
+        Returns: number
+      }
       get_card_value: {
         Args: { p_rank: Database["public"]["Enums"]["card_rank"] }
         Returns: number
@@ -886,6 +901,13 @@ export type Database = {
       get_room_details: {
         Args: { p_room_id: string }
         Returns: Json
+      }
+      get_thai_dummy_card_score: {
+        Args: {
+          p_rank: Database["public"]["Enums"]["card_rank"]
+          p_is_speto?: boolean
+        }
+        Returns: number
       }
       get_user_profiles: {
         Args: Record<PropertyKey, never>
@@ -991,6 +1013,10 @@ export type Database = {
           p_guest_identifier?: string
         }
         Returns: boolean
+      }
+      validate_dummy_meld: {
+        Args: { p_session_id: string; p_card_ids: string[] }
+        Returns: string
       }
     }
     Enums: {

@@ -289,6 +289,8 @@ BEGIN
     RAISE EXCEPTION 'Meld cards must be unique';
   END IF;
 
+  PERFORM public.validate_dummy_meld(p_session_id, p_meld_cards);
+
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
   IF NOT v_can_access THEN
     RAISE EXCEPTION 'Not authorized';
@@ -556,6 +558,118 @@ END;
 $$ LANGUAGE plpgsql STABLE;
 
 -- =====================================================
+-- THAI DUMMY MELD VALIDATION HELPERS
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.get_card_rank_order(
+  p_rank public.card_rank
+)
+RETURNS INTEGER AS $$
+BEGIN
+  RETURN CASE p_rank
+    WHEN 'A' THEN 1
+    WHEN '2' THEN 2
+    WHEN '3' THEN 3
+    WHEN '4' THEN 4
+    WHEN '5' THEN 5
+    WHEN '6' THEN 6
+    WHEN '7' THEN 7
+    WHEN '8' THEN 8
+    WHEN '9' THEN 9
+    WHEN '10' THEN 10
+    WHEN 'J' THEN 11
+    WHEN 'Q' THEN 12
+    WHEN 'K' THEN 13
+  END;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION public.validate_dummy_meld(
+  p_session_id UUID,
+  p_card_ids UUID[]
+)
+RETURNS TEXT AS $$
+DECLARE
+  v_expected_count INTEGER;
+  v_total_cards INTEGER;
+  v_unique_ranks INTEGER;
+  v_unique_suits INTEGER;
+  v_rank_orders INTEGER[];
+  v_meld_type TEXT;
+  v_idx INTEGER;
+BEGIN
+  IF p_card_ids IS NULL OR array_length(p_card_ids, 1) < 3 THEN
+    RAISE EXCEPTION 'Meld requires at least three cards';
+  END IF;
+
+  v_expected_count := array_length(p_card_ids, 1);
+
+  SELECT COUNT(*)
+  INTO v_total_cards
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND id = ANY(p_card_ids);
+
+  IF v_total_cards <> v_expected_count THEN
+    RAISE EXCEPTION 'Meld cards must belong to the current session';
+  END IF;
+
+  WITH card_data AS (
+    SELECT
+      gc.rank,
+      gc.suit,
+      public.get_card_rank_order(gc.rank) AS rank_order
+    FROM public.game_cards gc
+    WHERE gc.session_id = p_session_id
+      AND gc.id = ANY(p_card_ids)
+  ), ordered_data AS (
+    SELECT rank, suit, rank_order
+    FROM card_data
+    ORDER BY rank_order
+  )
+  SELECT
+    COUNT(*) AS total_cards,
+    COUNT(DISTINCT rank) AS unique_ranks,
+    COUNT(DISTINCT suit) AS unique_suits,
+    array_agg(rank_order) AS rank_orders
+  INTO
+    v_total_cards,
+    v_unique_ranks,
+    v_unique_suits,
+    v_rank_orders
+  FROM ordered_data;
+
+  IF v_total_cards <> v_expected_count THEN
+    RAISE EXCEPTION 'Meld cards missing in session';
+  END IF;
+
+  IF v_unique_ranks = 1 THEN
+    v_meld_type := 'set';
+  ELSIF v_unique_suits = 1 THEN
+    IF v_unique_ranks <> v_total_cards THEN
+      RAISE EXCEPTION 'Run cannot contain duplicate ranks';
+    END IF;
+
+    IF array_length(v_rank_orders, 1) <> v_total_cards THEN
+      RAISE EXCEPTION 'Run requires ordered ranks';
+    END IF;
+
+    FOR v_idx IN 2..v_total_cards LOOP
+      IF v_rank_orders[v_idx] <> v_rank_orders[v_idx - 1] + 1 THEN
+        RAISE EXCEPTION 'Run requires consecutive ranks';
+      END IF;
+    END LOOP;
+
+    v_meld_type := 'run';
+  ELSE
+    RAISE EXCEPTION 'Meld must be either a set (same rank) or a run (same suit)';
+  END IF;
+
+  RETURN v_meld_type;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- =====================================================
 -- DRAW FROM DISCARD AND MELD
 -- =====================================================
 
@@ -585,6 +699,8 @@ BEGIN
   IF v_distinct_count <> array_length(p_meld_cards, 1) THEN
     RAISE EXCEPTION 'Meld cards must be unique';
   END IF;
+
+  PERFORM public.validate_dummy_meld(p_session_id, p_meld_cards);
 
   -- Check access
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
