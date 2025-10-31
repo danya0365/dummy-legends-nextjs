@@ -526,6 +526,10 @@ DECLARE
   v_can_access BOOLEAN;
   v_current_turn UUID;
   v_next_player UUID;
+  v_deadwood_value INTEGER;
+  v_deadwood_count INTEGER;
+  v_winning_type public.game_move_type;
+  v_finish_result UUID;
 BEGIN
   -- Check access
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
@@ -585,6 +589,32 @@ BEGIN
     jsonb_build_object('card_id', p_card_id)
   );
   
+  -- Check if discard ends the round (auto knock/gin)
+  SELECT COALESCE(SUM(card_value), 0), COALESCE(COUNT(id), 0)
+  INTO v_deadwood_value, v_deadwood_count
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND owner_gamer_id = p_gamer_id
+    AND location = 'hand';
+
+  v_winning_type := NULL;
+
+  IF v_deadwood_count = 0 THEN
+    v_winning_type := 'gin';
+  ELSIF v_deadwood_value <= 10 THEN
+    v_winning_type := 'knock';
+  END IF;
+
+  IF v_winning_type IS NOT NULL THEN
+    v_finish_result := public.finish_game_round(
+      p_session_id => p_session_id,
+      p_gamer_id => p_gamer_id,
+      p_winning_type => v_winning_type,
+      p_guest_identifier => p_guest_identifier
+    );
+    RETURN true;
+  END IF;
+
   -- Get next player
   SELECT gamer_id INTO v_next_player
   FROM public.room_players
