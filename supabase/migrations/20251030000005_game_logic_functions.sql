@@ -462,6 +462,100 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =====================================================
+-- THAI DUMMY SCORING HELPERS
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.get_thai_dummy_card_score(
+  p_rank public.card_rank,
+  p_is_speto BOOLEAN DEFAULT false
+)
+RETURNS INTEGER AS $$
+BEGIN
+  IF p_is_speto THEN
+    RETURN 50;
+  END IF;
+
+  RETURN CASE p_rank
+    WHEN 'A' THEN 15
+    WHEN '2' THEN 5
+    WHEN '3' THEN 5
+    WHEN '4' THEN 5
+    WHEN '5' THEN 5
+    WHEN '6' THEN 5
+    WHEN '7' THEN 5
+    WHEN '8' THEN 5
+    WHEN '9' THEN 5
+    WHEN '10' THEN 10
+    WHEN 'J' THEN 10
+    WHEN 'Q' THEN 10
+    WHEN 'K' THEN 10
+  END;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION public.compute_thai_dummy_deadwood(
+  p_session_id UUID,
+  p_gamer_id UUID
+)
+RETURNS TABLE(card_id UUID, score INTEGER) AS $$
+BEGIN
+  RETURN QUERY
+    SELECT gc.id,
+           public.get_thai_dummy_card_score(
+             gc.rank,
+             (gc.rank = '2' AND gc.suit = 'clubs') OR (gc.rank = 'Q' AND gc.suit = 'spades')
+           )
+    FROM public.game_cards gc
+    WHERE gc.session_id = p_session_id
+      AND gc.owner_gamer_id = p_gamer_id
+      AND gc.location = 'hand';
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+CREATE OR REPLACE FUNCTION public.compute_thai_dummy_scores(
+  p_session_id UUID
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_scores JSONB := '[]'::jsonb;
+  v_gamer_id UUID;
+  v_deadwood_cards JSONB;
+  v_deadwood_value INTEGER;
+  v_total_score INTEGER;
+BEGIN
+  FOR v_gamer_id IN
+    SELECT gamer_id
+    FROM public.game_hands
+    WHERE session_id = p_session_id
+  LOOP
+    SELECT COALESCE(jsonb_agg(
+             jsonb_build_object('card_id', cd.card_id, 'score', cd.score)
+           ), '[]'::jsonb)
+    INTO v_deadwood_cards
+    FROM public.compute_thai_dummy_deadwood(p_session_id, v_gamer_id) cd;
+
+    SELECT COALESCE(SUM(cd.score), 0)
+    INTO v_deadwood_value
+    FROM public.compute_thai_dummy_deadwood(p_session_id, v_gamer_id) cd;
+
+    v_total_score := v_deadwood_value;
+
+    v_scores := v_scores || jsonb_build_array(
+      jsonb_build_object(
+        'gamer_id', v_gamer_id,
+        'deadwood_score', v_deadwood_value,
+        'deadwood_cards', v_deadwood_cards,
+        'melds', COALESCE((SELECT gh.melds FROM public.game_hands gh WHERE gh.session_id = p_session_id AND gh.gamer_id = v_gamer_id), '[]'::jsonb),
+        'total_score', v_total_score
+      )
+    );
+  END LOOP;
+
+  RETURN v_scores;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- =====================================================
 -- DRAW FROM DISCARD AND MELD
 -- =====================================================
 
@@ -744,13 +838,15 @@ DECLARE
   v_result_id UUID;
   v_room_id UUID;
   v_final_scores JSONB;
-  v_supported_types CONSTANT public.game_move_type[] := ARRAY['knock', 'gin', 'dummy_finish'];
+  v_thai_scores JSONB;
+  v_winner_score INTEGER := 0;
+  v_player_result JSONB;
 BEGIN
   IF p_winning_type IS NULL THEN
     RAISE EXCEPTION 'Winning type is required';
   END IF;
 
-  IF NOT (p_winning_type = ANY(v_supported_types)) THEN
+  IF NOT (p_winning_type = ANY(ARRAY['knock', 'gin', 'dummy_finish'])) THEN
     RAISE EXCEPTION 'Unsupported winning type %', p_winning_type;
   END IF;
 
@@ -800,18 +896,24 @@ BEGIN
     END IF;
   END IF;
 
+  v_thai_scores := public.compute_thai_dummy_scores(p_session_id);
+
   WITH player_deadwood AS (
-    SELECT gh.session_id,
-           gh.gamer_id,
-           COALESCE(COUNT(gc.id), 0) AS card_count,
-           COALESCE(SUM(gc.card_value), 0) AS total_value
+    SELECT
+      gh.session_id,
+      gh.gamer_id,
+      COALESCE(jsonb_array_length(score_elem.elem->'deadwood_cards'), 0) AS card_count,
+      COALESCE((score_elem.elem->>'deadwood_score')::INTEGER, 0) AS total_value,
+      COALESCE((score_elem.elem->>'total_score')::INTEGER, 0) AS thai_score,
+      score_elem.elem
     FROM public.game_hands gh
-    LEFT JOIN public.game_cards gc
-      ON gc.session_id = gh.session_id
-     AND gc.owner_gamer_id = gh.gamer_id
-     AND gc.location = 'hand'
+    LEFT JOIN LATERAL (
+      SELECT elem
+      FROM jsonb_array_elements(v_thai_scores) AS elem
+      WHERE elem->>'gamer_id' = gh.gamer_id::TEXT
+      LIMIT 1
+    ) AS score_elem ON TRUE
     WHERE gh.session_id = p_session_id
-    GROUP BY gh.session_id, gh.gamer_id
   )
   UPDATE public.game_hands gh
   SET deadwood_count = pd.card_count,
@@ -823,16 +925,22 @@ BEGIN
 
   SELECT COALESCE(jsonb_agg(
            jsonb_build_object(
-             'gamer_id', gh.gamer_id,
-             'deadwood_count', gh.deadwood_count,
-             'deadwood_value', gh.deadwood_value,
-             'melds', COALESCE(gh.melds, '[]'::jsonb)
+             'gamer_id', (elem->>'gamer_id')::UUID,
+             'deadwood_score', (elem->>'deadwood_score')::INTEGER,
+             'deadwood_cards', elem->'deadwood_cards',
+             'melds', elem->'melds',
+             'total_score', (elem->>'total_score')::INTEGER
            )
-           ORDER BY gh.deadwood_value, gh.gamer_id
+           ORDER BY (elem->>'total_score')::INTEGER, (elem->>'gamer_id')
          ), '[]'::jsonb)
   INTO v_final_scores
-  FROM public.game_hands gh
-  WHERE gh.session_id = p_session_id;
+  FROM jsonb_array_elements(v_thai_scores) elem;
+
+  SELECT (elem->>'total_score')::INTEGER
+  INTO v_winner_score
+  FROM jsonb_array_elements(v_thai_scores) elem
+  WHERE elem->>'gamer_id' = p_gamer_id::TEXT
+  LIMIT 1;
 
   v_move_number := (
     SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id
@@ -850,6 +958,7 @@ BEGIN
     p_winning_type,
     v_move_number,
     jsonb_build_object(
+      'thai_dummy_score', v_winner_score,
       'deadwood_value', v_deadwood_value,
       'deadwood_count', v_deadwood_count
     )
@@ -896,12 +1005,11 @@ BEGIN
     v_room_id,
     p_session_id,
     p_gamer_id,
-    p_winning_type::TEXT,
+    p_winning_type,
     v_final_scores,
     v_session.round_number,
     v_total_moves,
-    v_duration_seconds,
-    NOW()
+    v_duration_seconds
   ) RETURNING id INTO v_result_id;
 
   RETURN v_result_id;
