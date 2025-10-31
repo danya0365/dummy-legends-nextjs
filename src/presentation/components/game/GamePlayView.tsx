@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGameStore } from "@/src/stores/gameStore";
 import { PlayingCard, CardBack } from "./PlayingCard";
-import { Users, ArrowLeft, RefreshCw } from "lucide-react";
+import { Users, ArrowLeft, RefreshCw, Sparkles, XCircle } from "lucide-react";
 
 interface GamePlayViewProps {
   sessionId: string;
@@ -21,6 +21,12 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     loadGameState,
     drawCard,
     discardCard,
+    createMeld,
+    startMeldSelection,
+    cancelMeldSelection,
+    toggleMeldCard,
+    pendingMeldCardIds,
+    isSelectingMeld,
     unsubscribeFromGame,
     isLoading,
     error,
@@ -28,7 +34,6 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
 
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [hasDrawn, setHasDrawn] = useState(false);
-  const [pendingMeldCardIds, setPendingMeldCardIds] = useState<string[]>([]);
 
   useEffect(() => {
     // Load game state
@@ -63,7 +68,6 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
 
       await drawCard(false, { meldCards });
       setHasDrawn(true);
-      setPendingMeldCardIds([]);
     } catch (error) {
       console.error("Draw from discard error:", error);
     }
@@ -73,6 +77,32 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     if (!hasDrawn || !isMyTurn) return;
     setSelectedCardId(cardId === selectedCardId ? null : cardId);
   };
+
+  const handleToggleMeldCard = (cardId: string) => {
+    if (!isMyTurn) return;
+    toggleMeldCard(cardId);
+  };
+
+  const handleStartMeldSelection = () => {
+    if (!isMyTurn) return;
+    startMeldSelection();
+  };
+
+  const handleCancelMeldSelection = () => {
+    cancelMeldSelection();
+  };
+
+  const handleConfirmMeld = async () => {
+    if (pendingMeldCardIds.length < 3) return;
+    try {
+      await createMeld();
+    } catch (error) {
+      console.error("Create meld error:", error);
+    }
+  };
+
+  const canConfirmMeld = pendingMeldCardIds.length >= 3;
+  const pendingMeldSet = useMemo(() => new Set(pendingMeldCardIds), [pendingMeldCardIds]);
 
   const handleDiscard = async () => {
     if (!selectedCardId || !hasDrawn || !isMyTurn) return;
@@ -269,28 +299,63 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">
               ไพ่ของคุณ ({myHand.length} ใบ)
             </h3>
-            {hasDrawn && selectedCardId && (
-              <button
-                onClick={handleDiscard}
-                disabled={!isMyTurn || isLoading}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ทิ้งไพ่ใบนี้
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {isSelectingMeld ? (
+                <>
+                  <button
+                    onClick={handleCancelMeldSelection}
+                    className="px-3 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg flex items-center gap-1 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    ยกเลิก
+                  </button>
+                  <button
+                    onClick={handleConfirmMeld}
+                    disabled={!canConfirmMeld || isLoading}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    เกิดไพ่ ({pendingMeldCardIds.length})
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleStartMeldSelection}
+                  className="px-4 py-2 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-200 rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors flex items-center gap-2"
+                  disabled={!isMyTurn}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  โหมดเกิดไพ่
+                </button>
+              )}
+            </div>
           </div>
-          
+
           <div className="flex flex-wrap gap-2 justify-center">
             {myHand.map((card) => (
               <PlayingCard
                 key={card.id}
                 card={card}
-                onClick={() => handleSelectCard(card.id)}
-                selected={card.id === selectedCardId}
-                disabled={!hasDrawn || !isMyTurn}
+                onClick={() =>
+                  isSelectingMeld
+                    ? handleToggleMeldCard(card.id)
+                    : handleSelectCard(card.id)
+                }
+                selected={
+                  isSelectingMeld
+                    ? pendingMeldSet.has(card.id)
+                    : card.id === selectedCardId
+                }
+                disabled={!isMyTurn || (!isSelectingMeld && !hasDrawn)}
               />
             ))}
           </div>
+
+          {isSelectingMeld && (
+            <p className="text-center text-sm text-emerald-700 dark:text-emerald-300 mt-4">
+              เลือกไพ่ให้ครบอย่างน้อย 3 ใบเพื่อกด &quot;เกิดไพ่&quot;
+            </p>
+          )}
 
           {myHand.length === 0 && (
             <p className="text-center text-gray-500 dark:text-gray-400 py-8">

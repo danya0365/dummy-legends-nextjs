@@ -222,6 +222,10 @@ interface GameStore extends RoomState {
   isGamerProfileModalOpen: boolean;
   isSavingGamerProfile: boolean;
 
+  // Meld selection state
+  pendingMeldCardIds: string[];
+  isSelectingMeld: boolean;
+
   // Game Play State
   currentSession: GameSession | null;
   myHand: GameCard[];
@@ -256,6 +260,10 @@ interface GameStore extends RoomState {
   startGameSession: () => Promise<string>;
   loadGameState: (sessionId: string) => Promise<void>;
   drawCard: (fromDeck: boolean, options?: { meldCards?: string[] }) => Promise<void>;
+  createMeld: (cardIds?: string[]) => Promise<string>;
+  startMeldSelection: () => void;
+  cancelMeldSelection: () => void;
+  toggleMeldCard: (cardId: string) => void;
   discardCard: (cardId: string) => Promise<void>;
   subscribeToGameSession: (sessionId: string) => Promise<void>;
   unsubscribeFromGame: () => void;
@@ -284,6 +292,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   isGamerProfileModalOpen: false,
   isSavingGamerProfile: false,
+  pendingMeldCardIds: [],
+  isSelectingMeld: false,
 
   // Initial State - Gameplay
   currentSession: null,
@@ -1209,6 +1219,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         myHand,
         discardTop,
         otherPlayers,
+        pendingMeldCardIds: [],
+        isSelectingMeld: false,
       });
     } catch (error) {
       console.error("Failed to load game state:", error);
@@ -1251,6 +1263,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // Reload game state
       await get().loadGameState(currentSession.id);
+
+      if (!fromDeck) {
+        set({ pendingMeldCardIds: [], isSelectingMeld: false });
+      }
     } catch (error) {
       console.error("Failed to draw card:", error);
       set({
@@ -1258,6 +1274,69 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
       throw error;
     }
+  },
+
+  createMeld: async (cardIds?: string[]) => {
+    try {
+      const { currentSession, gamerId, guestId, pendingMeldCardIds } = get();
+      if (!currentSession || !gamerId) {
+        throw new Error("ไม่พบเซสชันเกม");
+      }
+
+      const selectedCards =
+        cardIds && cardIds.length > 0 ? cardIds : pendingMeldCardIds;
+
+      if (!selectedCards || selectedCards.length < 3) {
+        throw new Error("ต้องเลือกไพ่อย่างน้อย 3 ใบเพื่อเกิด");
+      }
+
+      const { data, error } = await supabase.rpc("create_meld", {
+        p_session_id: currentSession.id,
+        p_gamer_id: gamerId,
+        p_meld_cards: selectedCards,
+        p_guest_identifier: guestId || undefined,
+      });
+
+      if (error) throw error;
+
+      await get().loadGameState(currentSession.id);
+      set({ pendingMeldCardIds: [], isSelectingMeld: false });
+      return (data as string) ?? "";
+    } catch (error) {
+      console.error("Failed to create meld:", error);
+      set({
+        error: error instanceof Error ? error.message : "ไม่สามารถเกิดไพ่ได้",
+      });
+      throw error;
+    }
+  },
+
+  startMeldSelection: () => {
+    set({ isSelectingMeld: true, pendingMeldCardIds: [] });
+  },
+
+  cancelMeldSelection: () => {
+    set({ isSelectingMeld: false, pendingMeldCardIds: [] });
+  },
+
+  toggleMeldCard: (cardId: string) => {
+    set((state) => {
+      const shouldStart =
+        !state.isSelectingMeld && state.pendingMeldCardIds.length === 0;
+      if (shouldStart) {
+        return { isSelectingMeld: true, pendingMeldCardIds: [cardId] };
+      }
+
+      const exists = state.pendingMeldCardIds.includes(cardId);
+      const pendingMeldCardIds = exists
+        ? state.pendingMeldCardIds.filter((id) => id !== cardId)
+        : [...state.pendingMeldCardIds, cardId];
+
+      return {
+        pendingMeldCardIds,
+        isSelectingMeld: pendingMeldCardIds.length > 0,
+      };
+    });
   },
 
   /**
@@ -1279,6 +1358,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // Reload game state
       await get().loadGameState(currentSession.id);
+      set({ pendingMeldCardIds: [], isSelectingMeld: false });
     } catch (error) {
       console.error("Failed to discard card:", error);
       set({
