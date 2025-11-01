@@ -210,8 +210,8 @@ export function GamePlayPortrait({
             const position = opponentPositions[index];
             if (!position) return null;
 
-            const maxPreviewCards = Math.min(player.cardCount, 4);
-            const remainingCards = player.cardCount - maxPreviewCards;
+            const previewCount = Math.min(player.cardCount, 5);
+            const remainingCards = player.cardCount - previewCount;
 
             return (
               <div
@@ -233,13 +233,18 @@ export function GamePlayPortrait({
                   <span className="truncate max-w-[90px]">{player.displayName || "ผู้เล่น"}</span>
                 </div>
 
-                <div className="mt-2 flex items-center gap-1 rounded-xl bg-white/80 px-3 py-1 text-xs text-gray-700 shadow dark:bg-slate-800/80 dark:text-gray-200">
-                  <div className="flex items-center gap-0.5">
-                    {Array.from({ length: maxPreviewCards }).map((_, previewIndex) => (
-                      <CardBack key={previewIndex} size="small" />
+                <div className="mt-2 flex items-center gap-2 rounded-xl bg-white/80 px-3 py-1 text-xs text-gray-700 shadow dark:bg-slate-800/80 dark:text-gray-200">
+                  <div className="flex items-center">
+                    {Array.from({ length: previewCount }).map((_, previewIndex) => (
+                      <div
+                        key={previewIndex}
+                        className={previewIndex === 0 ? "relative" : "relative -ml-5"}
+                      >
+                        <CardBack size="small" />
+                      </div>
                     ))}
                     {remainingCards > 0 && (
-                      <span className="ml-1 text-[10px] font-semibold text-gray-500 dark:text-gray-300">
+                      <span className="ml-2 text-[10px] font-semibold text-gray-500 dark:text-gray-300">
                         +{remainingCards}
                       </span>
                     )}

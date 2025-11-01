@@ -313,15 +313,24 @@ export function GamePlayLandscape({
                     </span>
                   </div>
 
-                  <div className="mt-2 flex items-center gap-1 rounded-xl bg-white/80 px-3 py-1 text-xs text-gray-700 shadow dark:bg-slate-800/80 dark:text-gray-200">
-                    <div className="flex items-center gap-0.5">
+                  <div className="mt-2 flex items-center gap-2 rounded-xl bg-white/80 px-3 py-1 text-xs text-gray-700 shadow dark:bg-slate-800/80 dark:text-gray-200">
+                    <div className="flex items-center">
                       {Array.from({ length: maxPreviewCards }).map(
                         (_, previewIndex) => (
-                          <CardBack key={previewIndex} size="small" />
+                          <div
+                            key={previewIndex}
+                            className={
+                              previewIndex === 0
+                                ? "relative"
+                                : "relative -ml-5"
+                            }
+                          >
+                            <CardBack size="small" />
+                          </div>
                         )
                       )}
                       {remainingCards > 0 && (
-                        <span className="ml-1 text-[10px] font-semibold text-gray-500 dark:text-gray-300">
+                        <span className="ml-2 text-[10px] font-semibold text-gray-500 dark:text-gray-300">
                           +{remainingCards}
                         </span>
                       )}

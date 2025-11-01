@@ -172,35 +172,52 @@ export function GamePlaySimpleView({
               ผู้เล่นอื่น
             </h3>
             <div className="space-y-3">
-              {otherPlayers.map((player) => (
-                <div
-                  key={player.gamerId}
-                  className={`p-3 rounded-lg border-2 ${
-                    player.isCurrentTurn
-                      ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20"
-                      : "border-gray-200 dark:border-gray-700"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-900 dark:text-gray-100">
-                      {player.displayName || "ผู้เล่น"}
-                    </span>
-                    {player.isCurrentTurn && (
-                      <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded">
-                        กำลังเล่น
+              {otherPlayers.map((player) => {
+                const previewCount = Math.min(player.cardCount, 6);
+                const remainingCards = player.cardCount - previewCount;
+
+                return (
+                  <div
+                    key={player.gamerId}
+                    className={`p-3 rounded-lg border-2 ${
+                      player.isCurrentTurn
+                        ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20"
+                        : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {player.displayName || "ผู้เล่น"}
                       </span>
-                    )}
+                      {player.isCurrentTurn && (
+                        <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded">
+                          กำลังเล่น
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between">
+                      <div className="flex items-center">
+                        {Array.from({ length: previewCount }).map((_, index) => (
+                          <div
+                            key={index}
+                            className={index === 0 ? "relative" : "relative -ml-5"}
+                          >
+                            <CardBack size="small" />
+                          </div>
+                        ))}
+                        {remainingCards > 0 && (
+                          <span className="ml-3 text-xs font-semibold text-gray-500 dark:text-gray-300">
+                            +{remainingCards}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        {player.cardCount} ใบ
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-2 flex gap-1">
-                    {Array.from({ length: player.cardCount }).map((_, i) => (
-                      <CardBack key={i} size="small" />
-                    ))}
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                    {player.cardCount} ใบ
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
