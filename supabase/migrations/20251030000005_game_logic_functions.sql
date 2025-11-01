@@ -1238,7 +1238,7 @@ BEGIN
         SELECT
           gc.meld_id,
           MIN(gc.created_at) AS created_at,
-          MAX(gc.owner_gamer_id) FILTER (WHERE gc.owner_gamer_id IS NOT NULL) AS owner_gamer_id
+          MIN(gc.owner_gamer_id::text) FILTER (WHERE gc.owner_gamer_id IS NOT NULL) AS owner_gamer_id
         FROM public.game_cards gc
         WHERE gc.session_id = p_session_id
           AND gc.location = 'meld'
