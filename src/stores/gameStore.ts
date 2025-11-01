@@ -403,8 +403,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
         guestId = guestIdentifier.getOrCreate();
         const storedGamerId = guestIdentifier.getGamerId();
 
+        let resolvedStoredGamerId: string | null = storedGamerId ?? null;
+
         if (storedGamerId) {
-          gamerId = storedGamerId;
+          const { data: existingGamer, error: existingError } = await supabase
+            .from("gamers")
+            .select("id")
+            .eq("id", storedGamerId)
+            .maybeSingle();
+
+          if (existingError) {
+            console.warn("Failed to validate stored guest gamer id", existingError);
+            resolvedStoredGamerId = null;
+          } else if (!existingGamer) {
+            // Local storage holds stale gamerId (e.g. after DB reset)
+            guestIdentifier.clear();
+            resolvedStoredGamerId = null;
+            guestId = guestIdentifier.getOrCreate();
+          }
+        }
+
+        if (resolvedStoredGamerId) {
+          gamerId = resolvedStoredGamerId;
         } else {
           const displayName =
             "Guest_" + Math.random().toString(36).substr(2, 6);
@@ -414,7 +434,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
           });
 
           if (error) throw error;
-          gamerId = data[0].gamer_id;
+
+          const createdGamerId = Array.isArray(data) ? data[0]?.gamer_id : null;
+          if (!createdGamerId) {
+            throw new Error("Failed to create guest gamer record");
+          }
+
+          gamerId = createdGamerId;
           guestIdentifier.setGamerId(gamerId);
         }
       }
