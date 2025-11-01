@@ -520,6 +520,9 @@ DECLARE
   v_remaining_card UUID;
   v_new_discard_top UUID;
   v_result UUID;
+  v_last_move_type public.game_move_type;
+  v_last_move_data JSONB;
+  v_last_move_created_at TIMESTAMP;
 BEGIN
   IF p_meld_cards IS NULL OR array_length(p_meld_cards, 1) < 3 THEN
     RAISE EXCEPTION 'Meld requires at least three cards';
@@ -555,6 +558,30 @@ BEGIN
       AND NOT (owner_gamer_id = p_gamer_id AND location = 'hand')
   ) THEN
     RAISE EXCEPTION 'All meld cards must be in your hand';
+  END IF;
+
+  SELECT
+    gm.move_type,
+    gm.move_data,
+    gm.created_at
+  INTO v_last_move_type, v_last_move_data, v_last_move_created_at
+  FROM public.game_moves gm
+  WHERE gm.session_id = p_session_id
+  ORDER BY gm.move_number DESC
+  LIMIT 1;
+
+  IF v_last_move_type IS NULL OR v_last_move_type NOT IN ('draw_deck', 'draw_discard') THEN
+    RAISE EXCEPTION 'Must draw a card before creating a meld';
+  END IF;
+
+  IF v_last_move_type = 'draw_discard' THEN
+    IF v_last_move_data ->> 'card_id' IS NULL THEN
+      RAISE EXCEPTION 'Invalid draw_discard move data';
+    END IF;
+
+    IF NOT ((v_last_move_data ->> 'card_id')::uuid = ANY(p_meld_cards)) THEN
+      RAISE EXCEPTION 'Discard card drawn must be part of meld';
+    END IF;
   END IF;
 
   SELECT
