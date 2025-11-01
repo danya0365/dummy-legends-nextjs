@@ -45,6 +45,19 @@ export interface Meld {
   cards: string[]; // card IDs
 }
 
+export interface PlayerMeld {
+  meldId: string;
+  cards: GameCard[];
+  createdAt?: string | null;
+}
+
+export interface TableMeld {
+  meldId: string;
+  ownerGamerId: string | null;
+  cards: GameCard[];
+  createdAt?: string | null;
+}
+
 export interface OtherPlayer {
   gamerId: string;
   cardCount: number;
@@ -77,6 +90,17 @@ export interface GameStatePayload {
   my_hand: GameCardRow[] | null;
   discard_top: GameCardRow | null;
   other_players: GameStateOtherPlayerSummary[] | null;
+  my_melds?: Array<{
+    meld_id: string;
+    created_at?: string | null;
+    cards: GameCardRow[];
+  }> | null;
+  table_melds?: Array<{
+    meld_id: string;
+    owner_gamer_id: string | null;
+    created_at?: string | null;
+    cards: GameCardRow[];
+  }> | null;
 }
 
 export interface GameMove {

@@ -1197,6 +1197,56 @@ BEGIN
       FROM public.game_cards c
       WHERE c.id = s.discard_pile_top_card_id
     ),
+    'my_melds', (
+      SELECT json_agg(
+        json_build_object(
+          'meld_id', mg.meld_id,
+          'created_at', mg.created_at,
+          'cards', (
+            SELECT json_agg(row_to_json(gc) ORDER BY gc.rank, gc.suit)
+            FROM public.game_cards gc
+            WHERE gc.meld_id = mg.meld_id
+          )
+        )
+        ORDER BY mg.created_at
+      )
+      FROM (
+        SELECT gc.meld_id, MIN(gc.created_at) AS created_at
+        FROM public.game_cards gc
+        WHERE gc.session_id = p_session_id
+          AND gc.location = 'meld'
+          AND gc.meld_id IS NOT NULL
+          AND gc.owner_gamer_id = p_gamer_id
+        GROUP BY gc.meld_id
+      ) AS mg
+    ),
+    'table_melds', (
+      SELECT json_agg(
+        json_build_object(
+          'meld_id', mg.meld_id,
+          'owner_gamer_id', mg.owner_gamer_id,
+          'created_at', mg.created_at,
+          'cards', (
+            SELECT json_agg(row_to_json(gc) ORDER BY gc.rank, gc.suit)
+            FROM public.game_cards gc
+            WHERE gc.meld_id = mg.meld_id
+          )
+        )
+        ORDER BY mg.created_at
+      )
+      FROM (
+        SELECT
+          gc.meld_id,
+          MIN(gc.created_at) AS created_at,
+          MAX(gc.owner_gamer_id) FILTER (WHERE gc.owner_gamer_id IS NOT NULL) AS owner_gamer_id
+        FROM public.game_cards gc
+        WHERE gc.session_id = p_session_id
+          AND gc.location = 'meld'
+          AND gc.meld_id IS NOT NULL
+          AND (gc.owner_gamer_id IS DISTINCT FROM p_gamer_id)
+        GROUP BY gc.meld_id
+      ) AS mg
+    ),
     'other_players', (
       SELECT json_agg(
         json_build_object(

@@ -399,13 +399,28 @@ RETURNS BOOLEAN AS $$
 DECLARE
   v_new_status BOOLEAN;
   v_can_access BOOLEAN;
+  v_room_status public.room_status;
 BEGIN
   -- Check access
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
   IF NOT v_can_access THEN
     RAISE EXCEPTION 'Not authorized';
   END IF;
-  
+
+  -- ensure room exists and status allows ready toggle
+  SELECT status INTO v_room_status
+  FROM public.game_rooms
+  WHERE id = p_room_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Room not found';
+  END IF;
+
+  IF v_room_status NOT IN ('waiting', 'ready') THEN
+    RAISE EXCEPTION 'Cannot toggle ready when room status is %', v_room_status;
+  END IF;
+
   -- Toggle ready
   UPDATE public.room_players
   SET is_ready = NOT is_ready

@@ -18,6 +18,8 @@ import type {
   GameStateOtherPlayerSummary,
   GameStatePayload,
   OtherPlayer,
+  PlayerMeld,
+  TableMeld,
 } from "@/src/domain/types/gameplay.types";
 import type { Json } from "@/src/domain/types/supabase";
 import { supabaseClient as supabase } from "@/src/infrastructure/supabase/client";
@@ -64,6 +66,28 @@ const mapGameCardRow = (card: GameCardRow): GameCard => ({
   location: card.location as GameCard["location"],
   ownerId: card.owner_gamer_id,
   position: card.position_in_location ?? 0,
+});
+
+const mapPlayerMeld = (meld: {
+  meld_id: string;
+  created_at?: string | null;
+  cards: GameCardRow[];
+}): PlayerMeld => ({
+  meldId: meld.meld_id,
+  createdAt: meld.created_at ?? null,
+  cards: meld.cards.map(mapGameCardRow),
+});
+
+const mapTableMeld = (meld: {
+  meld_id: string;
+  owner_gamer_id: string | null;
+  created_at?: string | null;
+  cards: GameCardRow[];
+}): TableMeld => ({
+  meldId: meld.meld_id,
+  ownerGamerId: meld.owner_gamer_id,
+  createdAt: meld.created_at ?? null,
+  cards: meld.cards.map(mapGameCardRow),
 });
 
 const mapOtherPlayerSummary = (
@@ -238,6 +262,8 @@ interface GameStore extends RoomState {
   // Game Play State
   currentSession: GameSession | null;
   myHand: GameCard[];
+  myMelds: PlayerMeld[];
+  tableMelds: TableMeld[];
   discardTop: GameCard | null;
   otherPlayers: OtherPlayer[];
   gameChannel: RealtimeChannel | null;
@@ -313,6 +339,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Initial State - Gameplay
   currentSession: null,
   myHand: [],
+  myMelds: [],
+  tableMelds: [],
   discardTop: null,
   otherPlayers: [],
   gameChannel: null,
@@ -1237,6 +1265,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? mapGameSessionRow(payload.session)
         : null;
       const myHand = (payload.my_hand ?? []).map(mapGameCardRow);
+      const myMelds = (payload.my_melds ?? []).map(mapPlayerMeld);
+      const tableMelds = (payload.table_melds ?? []).map(mapTableMeld);
       const discardTop = payload.discard_top
         ? mapGameCardRow(payload.discard_top)
         : null;
@@ -1249,6 +1279,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         myHand,
         discardTop,
         otherPlayers,
+        myMelds,
+        tableMelds,
         pendingMeldCardIds: [],
         isSelectingMeld: false,
       });

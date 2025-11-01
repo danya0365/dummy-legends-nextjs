@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { GameCard } from "@/src/domain/types/gameplay.types";
 import { useGameStore } from "@/src/stores/gameStore";
 import { PlayingCard, CardBack } from "./PlayingCard";
-import { Users, ArrowLeft, RefreshCw, Sparkles, XCircle } from "lucide-react";
+import { Users, ArrowLeft, RefreshCw, Sparkles, XCircle, Trophy } from "lucide-react";
 
 interface GamePlayViewProps {
   sessionId: string;
@@ -15,6 +16,8 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const {
     currentSession,
     myHand,
+    myMelds,
+    tableMelds,
     discardTop,
     otherPlayers,
     gamerId,
@@ -36,6 +39,52 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [guidanceMessage, setGuidanceMessage] = useState<string | null>(null);
+
+  const renderMeldCards = (cards: GameCard[]) => (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {cards.map((card) => (
+        <PlayingCard key={card.id} card={card} size="small" />
+      ))}
+    </div>
+  );
+
+  const isGameFinished = useMemo(() => {
+    if (!currentSession) return false;
+    return (
+      !currentSession.isActive ||
+      !!currentSession.finishedAt ||
+      !!currentSession.winnerId
+    );
+  }, [currentSession]);
+
+  const didIWin = useMemo(() => {
+    if (!currentSession || !isGameFinished) return false;
+    return currentSession.winnerId === gamerId;
+  }, [currentSession, gamerId, isGameFinished]);
+
+  const winnerName = useMemo(() => {
+    if (!currentSession?.winnerId) return "";
+    if (currentSession.winnerId === gamerId) return "คุณ";
+    return (
+      otherPlayers.find((player) => player.gamerId === currentSession.winnerId)
+        ?.displayName || "ผู้เล่น"
+    );
+  }, [currentSession?.winnerId, gamerId, otherPlayers]);
+
+  const winningTypeLabel = useMemo(() => {
+    if (!currentSession?.winningType) return null;
+    const map: Record<string, string> = {
+      knock: "น็อก",
+      gin: "กิ้น",
+      dummy_finish: "น็อก Dummy",
+    };
+    return map[currentSession.winningType] || currentSession.winningType;
+  }, [currentSession?.winningType]);
+
+  const communityMelds = useMemo(
+    () => tableMelds.filter((meld) => meld.ownerGamerId !== gamerId),
+    [tableMelds, gamerId]
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -205,6 +254,26 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
             <span>{otherPlayers.length + 1} ผู้เล่น</span>
           </div>
         </div>
+
+        {isGameFinished && (
+          <div className="mb-4 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white">
+                <Trophy className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-emerald-800 dark:text-emerald-200">
+                  เกมจบแล้ว! {didIWin ? "คุณเป็นผู้ชนะ" : `${winnerName} ชนะเกมนี้`}
+                </p>
+                {winningTypeLabel && (
+                  <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                    วิธีชนะ: {winningTypeLabel}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error Message */}
         {error && (
@@ -427,6 +496,85 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
               ไม่มีไพ่ในมือ
             </p>
           )}
+        </div>
+
+        {/* Meld Sections */}
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                ไพ่ที่คุณเกิด / ฝาก
+              </h3>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {myMelds.length} กอง
+              </span>
+            </div>
+
+            {myMelds.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-4 text-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  ยังไม่มีไพ่ที่คุณเกิดในรอบนี้ ลองจัดชุดแล้วกด &quot;เกิดไพ่&quot; เพื่อเริ่มทำคะแนน
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {myMelds.map((meld, index) => (
+                  <div
+                    key={meld.meldId}
+                    className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40 p-4"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-medium text-gray-800 dark:text-gray-200">
+                        ชุดที่ {index + 1}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {meld.cards.length} ใบ
+                      </span>
+                    </div>
+                    {renderMeldCards(meld.cards)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                ไพ่ที่เกิดบนโต๊ะ
+              </h3>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {communityMelds.length} กอง
+              </span>
+            </div>
+
+            {communityMelds.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-4 text-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  ยังไม่มีผู้เล่นอื่นเกิดไพ่บนโต๊ะ
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {communityMelds.map((meld) => (
+                  <div
+                    key={meld.meldId}
+                    className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40 p-4"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-medium text-gray-800 dark:text-gray-200">
+                        เจ้าของกอง: {meld.ownerGamerId === gamerId ? "คุณ" : "คู่แข่ง"}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {meld.cards.length} ใบ
+                      </span>
+                    </div>
+                    {renderMeldCards(meld.cards)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
