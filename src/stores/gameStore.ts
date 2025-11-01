@@ -263,6 +263,7 @@ interface GameStore extends RoomState {
   gamerId: string | null;
   guestId: string | null;
   roomChannel: RealtimeChannel | null;
+  lobbyChannel: RealtimeChannel | null;
   gamerProfile: GamerProfileData | null;
   gamerProfileForm: GamerProfileFormState;
   isGamerProfileModalOpen: boolean;
@@ -298,6 +299,8 @@ interface GameStore extends RoomState {
   toggleReady: () => void;
   startGame: () => Promise<void>;
   fetchAvailableRooms: () => Promise<void>;
+  subscribeToLobby: () => Promise<void>;
+  unsubscribeFromLobby: () => Promise<void>;
   subscribeToRoom: (roomId: string) => Promise<void>;
   unsubscribeFromRoom: () => Promise<void>;
   updateRoomStatus: (status: RoomStatus) => void;
@@ -339,10 +342,19 @@ interface GameStore extends RoomState {
  * Game Store using Zustand
  * Manages game rooms and gameplay state
  */
+export const EMPTY_CHANNEL: RealtimeChannel = {
+  subscribe: () => ({
+    data: null,
+  }),
+} as unknown as RealtimeChannel;
+
+const LOBBY_CHANNEL_KEY = "game:lobby";
+
 export const useGameStore = create<GameStore>((set, get) => ({
   // Initial State - Room
   currentRoom: null,
   availableRooms: [],
+  lobbyChannel: null,
   isInRoom: false,
   isLoading: false,
   error: null,
@@ -376,6 +388,48 @@ export const useGameStore = create<GameStore>((set, get) => ({
   gameScoreEvents: [],
   isLoadingResultSummary: false,
   resultSummaryError: null,
+
+  /**
+   * Subscribe to lobby updates
+   */
+  subscribeToLobby: async () => {
+    const { lobbyChannel } = get();
+    if (lobbyChannel) {
+      return;
+    }
+
+    const channel = supabase
+      .channel(LOBBY_CHANNEL_KEY)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_rooms",
+        },
+        async () => {
+          try {
+            await get().fetchAvailableRooms();
+          } catch (error) {
+            console.error("Failed to refresh lobby rooms", error);
+          }
+        }
+      )
+      .subscribe();
+
+    set({ lobbyChannel: channel });
+  },
+
+  /**
+   * Unsubscribe from lobby updates
+   */
+  unsubscribeFromLobby: async () => {
+    const { lobbyChannel } = get();
+    if (lobbyChannel) {
+      await supabase.removeChannel(lobbyChannel);
+      set({ lobbyChannel: null });
+    }
+  },
 
   /**
    * Initialize gamer (guest or authenticated)

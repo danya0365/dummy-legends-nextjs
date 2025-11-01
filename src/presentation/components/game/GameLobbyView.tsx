@@ -49,6 +49,8 @@ export function GameLobbyView() {
     saveGamerProfile,
     isSavingGamerProfile,
     gamerProfile,
+    subscribeToLobby,
+    unsubscribeFromLobby,
   } = useGameStore();
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -76,14 +78,25 @@ export function GameLobbyView() {
       if (!isMounted) return;
 
       await fetchAvailableRooms();
+
+      if (!isMounted) return;
+
+      await subscribeToLobby();
     };
 
     bootstrap();
 
     return () => {
       isMounted = false;
+      void unsubscribeFromLobby();
     };
-  }, [initializeGamer, loadLatestRoomContext, fetchAvailableRooms]);
+  }, [
+    initializeGamer,
+    loadLatestRoomContext,
+    fetchAvailableRooms,
+    subscribeToLobby,
+    unsubscribeFromLobby,
+  ]);
 
   const pendingProfileNotice = useMemo(() => {
     if (isGamerProfileModalOpen) return true;
