@@ -1,4 +1,3 @@
-import { MainLayout } from "@/src/presentation/components/layout";
 import type { Metadata } from "next";
 import ClientGamePlayView from "./ClientGamePlayView";
 
@@ -18,9 +17,5 @@ interface GamePlayPageProps {
 export default async function GamePlayPage({ params }: GamePlayPageProps) {
   const { sessionId } = await params;
 
-  return (
-    <MainLayout>
-      <ClientGamePlayView sessionId={sessionId} />
-    </MainLayout>
-  );
+  return <ClientGamePlayView sessionId={sessionId} />;
 }
