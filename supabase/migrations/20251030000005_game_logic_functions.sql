@@ -26,7 +26,7 @@ DECLARE
   v_suit TEXT;
   v_rank TEXT;
   v_position INTEGER := 0;
-  v_cards_per_player INTEGER := 7;
+  v_cards_per_player INTEGER := 0;
   v_head_card UUID;
   v_player_count INTEGER;
 BEGIN
@@ -65,15 +65,24 @@ BEGIN
     RAISE EXCEPTION 'Not all players are ready';
   END IF;
  
-  -- Ensure standard 4-player Dummy match
+  -- Ensure 2-4 active players according to Thai Dummy rules
   SELECT COUNT(*)
   INTO v_player_count
   FROM public.room_players
   WHERE room_id = p_room_id
     AND status != 'left';
 
-  IF v_player_count != 4 THEN
-    RAISE EXCEPTION 'Dummy requires exactly 4 active players';
+  IF v_player_count < 2 OR v_player_count > 4 THEN
+    RAISE EXCEPTION 'Dummy requires 2-4 active players';
+  END IF;
+
+  -- Determine cards per player based on player count
+  IF v_player_count = 2 THEN
+    v_cards_per_player := 11;
+  ELSIF v_player_count = 3 THEN
+    v_cards_per_player := 9;
+  ELSE
+    v_cards_per_player := 7;
   END IF;
   
   -- Update room status
@@ -131,7 +140,7 @@ BEGIN
     WHERE id = v_deck[i];
   END LOOP;
   
-  -- Deal cards to players (7 cards each as per rules)
+  -- Deal cards to players based on player count (11/9/7)
   v_position := 0;
   FOR v_players IN 
     SELECT gamer_id, position 

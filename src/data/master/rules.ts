@@ -71,13 +71,13 @@ export const DUMMY_RULES_CONTENT: DummyRulesContent = {
     {
       id: "players",
       label: "จำนวนผู้เล่น",
-      value: "4 คน (มาตรฐาน)",
+      value: "2-4 คน",
       highlight: true,
     },
     {
       id: "cards",
       label: "จำนวนไพ่เริ่มต้น",
-      value: "คนละ 7 ใบ",
+      value: "2 คน: 11 ใบ | 3 คน: 9 ใบ | 4 คน: 7 ใบ",
     },
     {
       id: "drawOptions",
