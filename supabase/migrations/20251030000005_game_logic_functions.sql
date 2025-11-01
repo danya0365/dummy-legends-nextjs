@@ -26,8 +26,9 @@ DECLARE
   v_suit TEXT;
   v_rank TEXT;
   v_position INTEGER := 0;
-  v_player_index INTEGER := 0;
-  v_cards_per_player INTEGER := 10;
+  v_cards_per_player INTEGER := 7;
+  v_head_card UUID;
+  v_player_count INTEGER;
 BEGIN
   -- Check host access
   v_can_access := public.can_access_gamer(p_host_gamer_id, p_guest_identifier);
@@ -63,6 +64,17 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Not all players are ready';
   END IF;
+ 
+  -- Ensure standard 4-player Dummy match
+  SELECT COUNT(*)
+  INTO v_player_count
+  FROM public.room_players
+  WHERE room_id = p_room_id
+    AND status != 'left';
+
+  IF v_player_count != 4 THEN
+    RAISE EXCEPTION 'Dummy requires exactly 4 active players';
+  END IF;
   
   -- Update room status
   UPDATE public.game_rooms
@@ -75,7 +87,7 @@ BEGIN
   VALUES (p_room_id)
   RETURNING id INTO v_session_id;
   
-  -- Create deck (52 cards)
+  -- Create deck (52 cards) with Dummy Legends scoring metadata
   FOR v_suit IN SELECT unnest(v_card_suits) LOOP
     FOR v_rank IN SELECT unnest(v_card_ranks) LOOP
       INSERT INTO public.game_cards (
@@ -84,14 +96,16 @@ BEGIN
         rank,
         card_value,
         location,
-        position_in_location
+        position_in_location,
+        is_speto
       ) VALUES (
         v_session_id,
         v_suit::public.card_suit,
         v_rank::public.card_rank,
         public.get_card_value(v_rank::public.card_rank),
         'deck',
-        v_position
+        v_position,
+        (v_rank = '2' AND v_suit = 'clubs') OR (v_rank = 'Q' AND v_suit = 'spades')
       ) RETURNING id INTO v_card_id;
       
       v_deck := array_append(v_deck, v_card_id);
@@ -117,7 +131,7 @@ BEGIN
     WHERE id = v_deck[i];
   END LOOP;
   
-  -- Deal cards to players (10 cards each)
+  -- Deal cards to players (7 cards each as per rules)
   v_position := 0;
   FOR v_players IN 
     SELECT gamer_id, position 
@@ -129,7 +143,7 @@ BEGIN
     INSERT INTO public.game_hands (session_id, gamer_id, card_count)
     VALUES (v_session_id, v_players.gamer_id, v_cards_per_player);
     
-    -- Deal 10 cards
+    -- Deal 7 cards
     FOR i IN 1..v_cards_per_player LOOP
       UPDATE public.game_cards
       SET location = 'hand',
@@ -140,17 +154,20 @@ BEGIN
     
     v_position := v_position + v_cards_per_player;
   END LOOP;
-  
-  -- Put first card in discard pile
+
+  -- Put first card in discard pile as table "head"
+  v_head_card := v_deck[v_position + 1];
   UPDATE public.game_cards
   SET location = 'discard',
       owner_gamer_id = NULL,
-      position_in_location = 0
-  WHERE id = v_deck[v_position + 1];
-  
+      position_in_location = 0,
+      is_head = true
+  WHERE id = v_head_card;
+
   -- Update session with discard pile top card
   UPDATE public.game_sessions
-  SET discard_pile_top_card_id = v_deck[v_position + 1],
+  SET discard_pile_top_card_id = v_head_card,
+      initial_discard_card_id = v_head_card,
       remaining_deck_cards = 52 - (v_position + 1),
       current_turn_gamer_id = (
         SELECT gamer_id FROM public.room_players

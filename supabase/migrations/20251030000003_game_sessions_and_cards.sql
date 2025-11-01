@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS public.game_sessions (
   
   started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   finished_at TIMESTAMP WITH TIME ZONE,
+  initial_discard_card_id UUID,
   
   game_state JSONB DEFAULT '{}'::jsonb
 );
@@ -68,6 +69,8 @@ CREATE TABLE IF NOT EXISTS public.game_cards (
   
   position_in_location INTEGER,
   meld_id UUID,
+  is_head BOOLEAN NOT NULL DEFAULT false,
+  is_speto BOOLEAN NOT NULL DEFAULT false,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -176,15 +179,15 @@ CREATE OR REPLACE FUNCTION public.get_card_value(p_rank public.card_rank)
 RETURNS INTEGER AS $$
 BEGIN
   RETURN CASE p_rank
-    WHEN 'A' THEN 1
-    WHEN '2' THEN 2
-    WHEN '3' THEN 3
-    WHEN '4' THEN 4
+    WHEN 'A' THEN 15
+    WHEN '2' THEN 5
+    WHEN '3' THEN 5
+    WHEN '4' THEN 5
     WHEN '5' THEN 5
-    WHEN '6' THEN 6
-    WHEN '7' THEN 7
-    WHEN '8' THEN 8
-    WHEN '9' THEN 9
+    WHEN '6' THEN 5
+    WHEN '7' THEN 5
+    WHEN '8' THEN 5
+    WHEN '9' THEN 5
     WHEN '10' THEN 10
     WHEN 'J' THEN 10
     WHEN 'Q' THEN 10
