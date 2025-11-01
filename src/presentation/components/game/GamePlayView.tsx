@@ -1,15 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useGameStore } from "@/src/stores/gameStore";
-import { GamePlayLanscape } from "./game-play/GamePlayLanscape";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { GamePlayLandscape } from "./game-play/GamePlayLandscape";
 import { GamePlayPortrait } from "./game-play/GamePlayPortrait";
+import { GamePlaySimpleView } from "./game-play/GamePlaySimpleView";
 import type { GamePlayLayoutProps } from "./game-play/types";
 
 interface GamePlayViewProps {
   sessionId: string;
 }
+
+const isShowSimpleView = true;
 
 export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const router = useRouter();
@@ -91,27 +94,34 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
 
     return otherPlayers.map((player, index) => {
       const roomPlayer = playersById.get(player.gamerId);
-      const fallbackName = `ผู้เล่น${otherPlayers.length > 1 ? ` ${index + 1}` : ""}`;
+      const fallbackName = `ผู้เล่น${
+        otherPlayers.length > 1 ? ` ${index + 1}` : ""
+      }`;
 
       return {
         ...player,
-        displayName: roomPlayer?.displayName || roomPlayer?.username || fallbackName,
+        displayName:
+          roomPlayer?.displayName || roomPlayer?.username || fallbackName,
         avatar: roomPlayer?.avatar ?? null,
         isHost: roomPlayer?.isHost ?? false,
       };
     });
   }, [currentRoom?.players, otherPlayers]);
 
-  const [orientation, setOrientation] = useState<"portrait" | "landscape">(() => {
-    if (typeof window === "undefined") return "portrait";
-    return window.innerWidth >= window.innerHeight ? "landscape" : "portrait";
-  });
+  const [orientation, setOrientation] = useState<"portrait" | "landscape">(
+    () => {
+      if (typeof window === "undefined") return "portrait";
+      return window.innerWidth >= window.innerHeight ? "landscape" : "portrait";
+    }
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const updateOrientation = () => {
-      setOrientation(window.innerWidth >= window.innerHeight ? "landscape" : "portrait");
+      setOrientation(
+        window.innerWidth >= window.innerHeight ? "landscape" : "portrait"
+      );
     };
 
     updateOrientation();
@@ -149,7 +159,12 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [currentSession?.currentTurnStartedAt, isGameFinished, turnTimeLimit, currentSession]);
+  }, [
+    currentSession?.currentTurnStartedAt,
+    isGameFinished,
+    turnTimeLimit,
+    currentSession,
+  ]);
 
   useEffect(() => {
     if (!currentRoom) return;
@@ -204,9 +219,11 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
       setGuidanceMessage("เริ่มเลือกไพ่ในมือเพื่อเกิดอย่างน้อย 3 ใบ");
     } else if (pendingMeldCardIds.length < 3) {
       const remaining = 3 - pendingMeldCardIds.length;
-      setGuidanceMessage(`เลือกเพิ่มอีก ${remaining} ใบเพื่อให้ครบก่อนกดเกิดไพ่`);
+      setGuidanceMessage(
+        `เลือกเพิ่มอีก ${remaining} ใบเพื่อให้ครบก่อนกดเกิดไพ่`
+      );
     } else {
-      setGuidanceMessage("ครบแล้ว! กดปุ่ม \"เกิดไพ่\" ได้เลย");
+      setGuidanceMessage('ครบแล้ว! กดปุ่ม "เกิดไพ่" ได้เลย');
     }
   }, [isSelectingMeld, pendingMeldCardIds]);
 
@@ -261,7 +278,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const handleStartMeldSelection = () => {
     if (!isMyTurn) return;
     startMeldSelection();
-    setGuidanceMessage("เลือกไพ่ในมืออย่างน้อย 3 ใบเพื่อกด \"เกิดไพ่\"");
+    setGuidanceMessage('เลือกไพ่ในมืออย่างน้อย 3 ใบเพื่อกด "เกิดไพ่"');
   };
 
   const handleCancelMeldSelection = () => {
@@ -281,7 +298,10 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   };
 
   const canConfirmMeld = pendingMeldCardIds.length >= 3;
-  const pendingMeldSet = useMemo(() => new Set(pendingMeldCardIds), [pendingMeldCardIds]);
+  const pendingMeldSet = useMemo(
+    () => new Set(pendingMeldCardIds),
+    [pendingMeldCardIds]
+  );
 
   const handleDiscard = async () => {
     if (!selectedCardId || !hasDrawn || !isMyTurn) return;
@@ -297,7 +317,9 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   };
 
   const isMyTurn = currentSession?.currentTurnGamerId === gamerId;
-  const currentTurnPlayer = otherPlayersWithDetails.find((p) => p.isCurrentTurn);
+  const currentTurnPlayer = otherPlayersWithDetails.find(
+    (p) => p.isCurrentTurn
+  );
   const currentTurnPlayerName = currentTurnPlayer?.displayName || "ผู้เล่น";
 
   const handleBack = useCallback(() => {
@@ -359,9 +381,13 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     onRefresh: handleRefresh,
   };
 
+  if (isShowSimpleView) {
+    return <GamePlaySimpleView {...layoutProps} />;
+  }
+
   return orientation === "portrait" ? (
     <GamePlayPortrait {...layoutProps} />
   ) : (
-    <GamePlayLanscape {...layoutProps} />
+    <GamePlayLandscape {...layoutProps} />
   );
 }
