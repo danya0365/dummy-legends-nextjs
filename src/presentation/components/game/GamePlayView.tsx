@@ -14,6 +14,7 @@ interface GamePlayViewProps {
 export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const router = useRouter();
   const {
+    currentRoom,
     currentSession,
     myHand,
     myMelds,
@@ -39,6 +40,9 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [guidanceMessage, setGuidanceMessage] = useState<string | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(
+    () => currentRoom?.settings.timeLimit ?? 60
+  );
 
   const renderMeldCards = (cards: GameCard[]) => (
     <div className="mt-3 flex flex-wrap gap-2">
@@ -46,6 +50,11 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
         <PlayingCard key={card.id} card={card} size="small" />
       ))}
     </div>
+  );
+
+  const turnTimeLimit = useMemo(
+    () => currentRoom?.settings.timeLimit ?? 60,
+    [currentRoom?.settings.timeLimit]
   );
 
   const isGameFinished = useMemo(() => {
@@ -85,6 +94,51 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     () => tableMelds.filter((meld) => meld.ownerGamerId !== gamerId),
     [tableMelds, gamerId]
   );
+
+  useEffect(() => {
+    if (!currentSession || !currentSession.currentTurnStartedAt) {
+      setRemainingSeconds(turnTimeLimit);
+      return;
+    }
+
+    if (isGameFinished || turnTimeLimit <= 0) {
+      setRemainingSeconds(0);
+      return;
+    }
+
+    const startedAt = new Date(currentSession.currentTurnStartedAt).getTime();
+
+    const updateRemaining = () => {
+      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+      const remaining = Math.max(turnTimeLimit - elapsedSeconds, 0);
+      setRemainingSeconds(remaining);
+    };
+
+    updateRemaining();
+    const intervalId = window.setInterval(updateRemaining, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [currentSession?.currentTurnStartedAt, isGameFinished, turnTimeLimit, currentSession]);
+
+  useEffect(() => {
+    if (!currentRoom) return;
+    setRemainingSeconds(turnTimeLimit);
+  }, [currentRoom, turnTimeLimit]);
+
+  const formattedRemaining = useMemo(() => {
+    const minutes = Math.floor(remainingSeconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const seconds = (remainingSeconds % 60).toString().padStart(2, "0");
+    return `${minutes}:${seconds}`;
+  }, [remainingSeconds]);
+
+  const timerPercentage = useMemo(() => {
+    if (turnTimeLimit <= 0) return 0;
+    return Math.max(Math.min((remainingSeconds / turnTimeLimit) * 100, 100), 0);
+  }, [remainingSeconds, turnTimeLimit]);
 
   useEffect(() => {
     let isActive = true;
@@ -239,7 +293,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
             <ArrowLeft className="h-5 w-5" />
             ออกจากเกม
           </button>
-          
+
           <div className="text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400">
               รอบที่ {currentSession.roundNumber}
@@ -247,6 +301,30 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
             <p className="font-semibold text-gray-900 dark:text-gray-100">
               {isMyTurn ? "🎯 ถึงเทิร์นของคุณ!" : `รอ ${currentTurnPlayer?.displayName || "ผู้เล่น"}...`}
             </p>
+            <div className="mt-2 w-40 mx-auto">
+              <div
+                className={`text-lg font-bold ${
+                  isMyTurn
+                    ? remainingSeconds <= 10
+                      ? "text-red-600"
+                      : "text-emerald-600"
+                    : "text-gray-600 dark:text-gray-300"
+                }`}
+              >
+                {formattedRemaining}
+              </div>
+              <div className="mt-1 h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    remainingSeconds <= 10 ? "bg-red-500" : "bg-emerald-500"
+                  } transition-all duration-500`}
+                  style={{ width: `${timerPercentage}%` }}
+                />
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                จำกัด {turnTimeLimit} วินาทีต่อเทิร์น
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
