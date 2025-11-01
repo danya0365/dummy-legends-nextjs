@@ -6,13 +6,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { GamePlayLandscape } from "./game-play/GamePlayLandscape";
 import { GamePlayPortrait } from "./game-play/GamePlayPortrait";
 import { GamePlaySimpleView } from "./game-play/GamePlaySimpleView";
-import type { GamePlayLayoutProps } from "./game-play/types";
+import { GamePlayViewTheme, type GamePlayLayoutProps } from "./game-play/types";
 
 interface GamePlayViewProps {
   sessionId: string;
 }
 
-const isShowSimpleView = true;
+const gamePlayTheme: GamePlayViewTheme = GamePlayViewTheme.Simple;
 
 export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const router = useRouter();
@@ -381,13 +381,16 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     onRefresh: handleRefresh,
   };
 
-  if (isShowSimpleView) {
-    return <GamePlaySimpleView {...layoutProps} />;
+  switch (gamePlayTheme) {
+    case GamePlayViewTheme.Simple:
+      return <GamePlaySimpleView {...layoutProps} />;
+    case GamePlayViewTheme.Theme1:
+      return orientation === "portrait" ? (
+        <GamePlayPortrait {...layoutProps} />
+      ) : (
+        <GamePlayLandscape {...layoutProps} />
+      );
+    default:
+      return <GamePlayPortrait {...layoutProps} />;
   }
-
-  return orientation === "portrait" ? (
-    <GamePlayPortrait {...layoutProps} />
-  ) : (
-    <GamePlayLandscape {...layoutProps} />
-  );
 }

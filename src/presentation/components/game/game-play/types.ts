@@ -13,6 +13,11 @@ export interface EnhancedOtherPlayer extends OtherPlayer {
   isHost?: boolean;
 }
 
+export enum GamePlayViewTheme {
+  Simple,
+  Theme1,
+}
+
 export interface GamePlayLayoutProps {
   currentRoom: GameRoom | null;
   currentSession: GameSession;
