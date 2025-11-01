@@ -95,6 +95,24 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     [tableMelds, gamerId]
   );
 
+  const otherPlayersWithDetails = useMemo(() => {
+    const playersById = new Map(
+      (currentRoom?.players ?? []).map((player) => [player.userId, player])
+    );
+
+    return otherPlayers.map((player, index) => {
+      const roomPlayer = playersById.get(player.gamerId);
+      const fallbackName = `ผู้เล่น${otherPlayers.length > 1 ? ` ${index + 1}` : ""}`;
+
+      return {
+        ...player,
+        displayName: roomPlayer?.displayName || roomPlayer?.username || fallbackName,
+        avatar: roomPlayer?.avatar ?? null,
+        isHost: roomPlayer?.isHost ?? false,
+      };
+    });
+  }, [currentRoom?.players, otherPlayers]);
+
   useEffect(() => {
     if (!currentSession || !currentSession.currentTurnStartedAt) {
       setRemainingSeconds(turnTimeLimit);
@@ -268,7 +286,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   };
 
   const isMyTurn = currentSession?.currentTurnGamerId === gamerId;
-  const currentTurnPlayer = otherPlayers.find((p) => p.isCurrentTurn);
+  const currentTurnPlayer = otherPlayersWithDetails.find((p) => p.isCurrentTurn);
 
   if (!currentSession) {
     return (
@@ -329,7 +347,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
 
           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
             <Users className="h-4 w-4" />
-            <span>{otherPlayers.length + 1} ผู้เล่น</span>
+            <span>{otherPlayersWithDetails.length + 1} ผู้เล่น</span>
           </div>
         </div>
 
@@ -368,7 +386,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
               ผู้เล่นอื่น
             </h3>
             <div className="space-y-3">
-              {otherPlayers.map((player) => (
+              {otherPlayersWithDetails.map((player) => (
                 <div
                   key={player.gamerId}
                   className={`p-3 rounded-lg border-2 ${
