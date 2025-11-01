@@ -567,6 +567,31 @@ BEGIN
   WHERE session_id = p_session_id
     AND id = ANY(p_meld_cards);
 
+  INSERT INTO public.game_melds (
+    id,
+    session_id,
+    gamer_id,
+    meld_type,
+    created_from_head,
+    includes_speto,
+    score_value,
+    metadata,
+    created_at
+  ) VALUES (
+    v_meld_id,
+    p_session_id,
+    p_gamer_id,
+    v_meld_type,
+    v_created_from_head,
+    v_includes_speto,
+    v_score_value,
+    jsonb_build_object(
+      'card_ids', p_meld_cards,
+      'speto_card_ids', v_speto_card_ids
+    ),
+    NOW()
+  );
+
   WITH card_input AS (
     SELECT card_id, ord - 1 AS card_index
     FROM unnest(p_meld_cards) WITH ORDINALITY AS t(card_id, ord)
