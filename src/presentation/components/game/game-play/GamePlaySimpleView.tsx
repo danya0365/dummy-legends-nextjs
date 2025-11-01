@@ -1,8 +1,8 @@
 "use client";
 
-import { GameCard } from "@/src/domain/types/gameplay.types";
 import {
   ArrowLeft,
+  HandCoins,
   RefreshCw,
   Sparkles,
   Trophy,
@@ -11,14 +11,6 @@ import {
 } from "lucide-react";
 import { CardBack, PlayingCard } from "../PlayingCard";
 import { GamePlayLayoutProps } from "./types";
-
-const renderMeldCards = (cards: GameCard[]) => (
-  <div className="flex flex-wrap justify-center gap-2">
-    {cards.map((card) => (
-      <PlayingCard key={card.id} card={card} size="small" />
-    ))}
-  </div>
-);
 
 export function GamePlaySimpleView({
   currentRoom,
@@ -45,7 +37,12 @@ export function GamePlaySimpleView({
   pendingMeldCardIds,
   pendingMeldSet,
   canConfirmMeld,
+  pendingLayoffCardIds,
+  pendingLayoffSet,
+  canConfirmLayoff,
   isSelectingMeld,
+  isSelectingLayoff,
+  selectedLayoffMeldId,
   isLoading,
   error,
   currentTurnPlayerName,
@@ -57,9 +54,34 @@ export function GamePlaySimpleView({
   onStartMeldSelection,
   onCancelMeldSelection,
   onConfirmMeld,
+  onToggleLayoffCard,
+  onStartLayoffSelection,
+  onCancelLayoffSelection,
+  onConfirmLayoff,
+  onSelectLayoffTarget,
   onDiscard,
   onRefresh,
 }: GamePlayLayoutProps) {
+  const availableLayoffTargets = myMelds.length + tableMelds.length;
+  const opponentMeldCount = communityMelds.length;
+
+  const handleLayoffTargetClick = (meldId: string) => {
+    const nextTarget = selectedLayoffMeldId === meldId ? null : meldId;
+    onSelectLayoffTarget(nextTarget);
+  };
+
+  const resolveMeldOwnerName = (ownerId: string | null) => {
+    if (!ownerId) return "ผู้เล่น";
+    if (ownerId === gamerId) return "คุณ";
+
+    const roomPlayer = currentRoom?.players.find((player) => player.userId === ownerId);
+    if (roomPlayer) {
+      return roomPlayer.displayName || roomPlayer.username || "ผู้เล่น";
+    }
+
+    const otherPlayer = otherPlayers.find((player) => player.gamerId === ownerId);
+    return otherPlayer?.displayName || "ผู้เล่น";
+  };
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-100 to-blue-100 dark:from-gray-900 dark:to-gray-800 p-4">
       <div className="max-w-7xl mx-auto">
@@ -303,7 +325,7 @@ export function GamePlaySimpleView({
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">
               ไพ่ของคุณ ({myHand.length} ใบ)
             </h3>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {isSelectingMeld ? (
                 <>
                   <button
@@ -333,6 +355,35 @@ export function GamePlaySimpleView({
                 </button>
               )}
 
+              {isSelectingLayoff ? (
+                <>
+                  <button
+                    onClick={onCancelLayoffSelection}
+                    className="px-3 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg flex items-center gap-1 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    ยกเลิกฝาก
+                  </button>
+                  <button
+                    onClick={onConfirmLayoff}
+                    disabled={!canConfirmLayoff || isLoading}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <HandCoins className="h-4 w-4" />
+                    ฝากไพ่ ({pendingLayoffCardIds.length})
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={onStartLayoffSelection}
+                  className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-200 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors flex items-center gap-2"
+                  disabled={!isMyTurn || availableLayoffTargets === 0}
+                >
+                  <HandCoins className="h-4 w-4" />
+                  โหมดฝากไพ่
+                </button>
+              )}
+
               <button
                 onClick={onDiscard}
                 disabled={
@@ -353,14 +404,20 @@ export function GamePlaySimpleView({
                 onClick={() =>
                   isSelectingMeld
                     ? onToggleMeldCard(card.id)
+                    : isSelectingLayoff
+                    ? onToggleLayoffCard(card.id)
                     : onSelectCard(card.id)
                 }
                 selected={
                   isSelectingMeld
                     ? pendingMeldSet.has(card.id)
+                    : isSelectingLayoff
+                    ? pendingLayoffSet.has(card.id)
                     : card.id === selectedCardId
                 }
-                disabled={!isMyTurn || (!isSelectingMeld && !hasDrawn)}
+                disabled={
+                  !isMyTurn || (!isSelectingMeld && !isSelectingLayoff && !hasDrawn)
+                }
               />
             ))}
           </div>
@@ -406,23 +463,41 @@ export function GamePlaySimpleView({
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {myMelds.map((meld, index) => (
-                  <div
-                    key={meld.meldId}
-                    className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40 p-4"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="font-medium text-gray-800 dark:text-gray-200">
-                        ชุดที่ {index + 1}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {meld.cards.length} ใบ
-                      </span>
-                    </div>
-                    {renderMeldCards(meld.cards)}
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {myMelds.map((meld) => {
+                  const isTarget = selectedLayoffMeldId === meld.meldId;
+                  return (
+                    <button
+                      key={meld.meldId}
+                      type="button"
+                      onClick={() => handleLayoffTargetClick(meld.meldId)}
+                      disabled={!isSelectingLayoff || availableLayoffTargets === 0}
+                      className={`w-full rounded-lg border p-3 text-left transition ${
+                        isTarget
+                          ? "border-indigo-500 ring-2 ring-indigo-300 dark:ring-indigo-700"
+                          : "border-gray-200 dark:border-gray-700"
+                      } ${
+                        isSelectingLayoff
+                          ? "hover:border-indigo-400 focus:outline-none"
+                          : "cursor-default"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2 text-sm text-gray-600 dark:text-gray-400">
+                        <span>กอง {meld.cards.length} ใบ</span>
+                        {isTarget && isSelectingLayoff && (
+                          <span className="text-indigo-500 dark:text-indigo-300 font-medium">
+                            เลือกฝากไพ่ที่นี่
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {meld.cards.map((card) => (
+                          <PlayingCard key={card.id} card={card} size="small" />
+                        ))}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -430,40 +505,59 @@ export function GamePlaySimpleView({
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                ไพ่ที่เกิดบนโต๊ะ
+                กองไพ่บนโต๊ะ
               </h3>
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                {communityMelds.length} กอง
+                {tableMelds.length} กอง (คู่แข่ง {opponentMeldCount})
               </span>
             </div>
 
-            {communityMelds.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-4 text-center">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  ยังไม่มีผู้เล่นอื่นเกิดไพ่บนโต๊ะ
+            <div className="space-y-3">
+              {tableMelds.length === 0 ? (
+                <p className="text-center text-gray-500 dark:text-gray-400">
+                  ยังไม่มีไพ่กองกลาง
                 </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {communityMelds.map((meld) => (
-                  <div
-                    key={meld.meldId}
-                    className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40 p-4"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="font-medium text-gray-800 dark:text-gray-200">
-                        เจ้าของกอง:{" "}
-                        {meld.ownerGamerId === gamerId ? "คุณ" : "คู่แข่ง"}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {meld.cards.length} ใบ
-                      </span>
-                    </div>
-                    {renderMeldCards(meld.cards)}
-                  </div>
-                ))}
-              </div>
-            )}
+              ) : (
+                tableMelds.map((meld) => {
+                  const isTarget = selectedLayoffMeldId === meld.meldId;
+                  return (
+                    <button
+                      key={meld.meldId}
+                      type="button"
+                      onClick={() => handleLayoffTargetClick(meld.meldId)}
+                      disabled={!isSelectingLayoff}
+                      className={`w-full rounded-lg border p-3 text-left transition ${
+                        isTarget
+                          ? "border-indigo-500 ring-2 ring-indigo-300 dark:ring-indigo-700"
+                          : "border-gray-200 dark:border-gray-700"
+                      } ${
+                        isSelectingLayoff
+                          ? "hover:border-indigo-400 focus:outline-none"
+                          : "cursor-default"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2 text-sm text-gray-600 dark:text-gray-400">
+                        <span>
+                          กองของ {resolveMeldOwnerName(meld.ownerGamerId)} ({
+                            meld.cards.length
+                          } ใบ)
+                        </span>
+                        {isTarget && isSelectingLayoff && (
+                          <span className="text-indigo-500 dark:text-indigo-300 font-medium">
+                            เลือกฝากไพ่ที่นี่
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {meld.cards.map((card) => (
+                          <PlayingCard key={card.id} card={card} size="small" />
+                        ))}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>

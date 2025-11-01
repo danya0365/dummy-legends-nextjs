@@ -44,6 +44,11 @@ export interface GamePlayLayoutProps {
   pendingMeldSet: Set<string>;
   canConfirmMeld: boolean;
   isSelectingMeld: boolean;
+  pendingLayoffCardIds: string[];
+  pendingLayoffSet: Set<string>;
+  canConfirmLayoff: boolean;
+  isSelectingLayoff: boolean;
+  selectedLayoffMeldId: string | null;
   isLoading: boolean;
   error: string | null;
   currentTurnPlayerName: string;
@@ -55,6 +60,11 @@ export interface GamePlayLayoutProps {
   onStartMeldSelection: () => void;
   onCancelMeldSelection: () => void;
   onConfirmMeld: () => void;
+  onToggleLayoffCard: (cardId: string) => void;
+  onStartLayoffSelection: () => void;
+  onCancelLayoffSelection: () => void;
+  onConfirmLayoff: () => void;
+  onSelectLayoffTarget: (meldId: string | null) => void;
   onDiscard: () => void;
   onRefresh: () => void;
 }

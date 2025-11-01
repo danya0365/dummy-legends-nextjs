@@ -33,8 +33,16 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     startMeldSelection,
     cancelMeldSelection,
     toggleMeldCard,
+    startLayoffSelection,
+    cancelLayoffSelection,
+    toggleLayoffCard,
+    selectLayoffTarget,
+    confirmLayoff,
     pendingMeldCardIds,
+    pendingLayoffCardIds,
     isSelectingMeld,
+    isSelectingLayoff,
+    targetMeldId,
     unsubscribeFromGame,
     isLoading,
     error,
@@ -212,7 +220,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   }, [sessionId, loadGameState, subscribeToGameSession, unsubscribeFromGame]);
 
   useEffect(() => {
-    if (!isSelectingMeld) {
+    if (!isSelectingMeld || isSelectingLayoff) {
       return;
     }
 
@@ -226,7 +234,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     } else {
       setGuidanceMessage('ครบแล้ว! กดปุ่ม "เกิดไพ่" ได้เลย');
     }
-  }, [isSelectingMeld, pendingMeldCardIds]);
+  }, [isSelectingMeld, pendingMeldCardIds, isSelectingLayoff]);
 
   const handleDrawFromDeck = async () => {
     if (hasDrawn || !isMyTurn) return;
@@ -271,6 +279,20 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     setSelectedCardId(cardId === selectedCardId ? null : cardId);
   };
 
+  useEffect(() => {
+    if (!isSelectingLayoff) {
+      return;
+    }
+
+    if (!targetMeldId) {
+      setGuidanceMessage("เลือกกองเกิดที่ต้องการฝาก (ฝากได้ทุกกอง)");
+    } else if (pendingLayoffCardIds.length === 0) {
+      setGuidanceMessage("เลือกไพ่ในมือที่จะฝากให้กับกองที่เลือก");
+    } else {
+      setGuidanceMessage('เลือกไพ่เพิ่มหรือกด "ฝากไพ่" เพื่อยืนยัน');
+    }
+  }, [isSelectingLayoff, targetMeldId, pendingLayoffCardIds]);
+
   const handleToggleMeldCard = (cardId: string) => {
     if (!isMyTurn) return;
     toggleMeldCard(cardId);
@@ -278,8 +300,9 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
 
   const handleStartMeldSelection = () => {
     if (!isMyTurn) return;
+    cancelLayoffSelection();
     startMeldSelection();
-    setGuidanceMessage('เลือกไพ่ในมืออย่างน้อย 3 ใบเพื่อกด "เกิดไพ่"');
+    setGuidanceMessage('เลือกไพ่ในมืออย่างน้อย 3 ใบเพื่อกด "เกิดไพ่" หรือเลือกฝาก');
   };
 
   const handleCancelMeldSelection = () => {
@@ -298,10 +321,48 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     }
   };
 
+  const handleStartLayoffSelection = () => {
+    if (!isMyTurn) return;
+    cancelMeldSelection();
+    startLayoffSelection();
+    setGuidanceMessage("เลือกกองที่ต้องการฝาก แล้วเลือกไพ่ในมือ");
+  };
+
+  const handleToggleLayoffCard = (cardId: string) => {
+    if (!isMyTurn) return;
+    toggleLayoffCard(cardId);
+  };
+
+  const handleCancelLayoffSelection = () => {
+    cancelLayoffSelection();
+    setGuidanceMessage(null);
+  };
+
+  const handleConfirmLayoff = async () => {
+    if (!pendingLayoffCardIds.length || !targetMeldId) return;
+    try {
+      await confirmLayoff();
+      setGuidanceMessage("ฝากไพ่สำเร็จ เลือกไพ่ที่จะทิ้งเพื่อจบเทิร์น");
+    } catch (error) {
+      console.error("Layoff error:", error);
+      setGuidanceMessage("ฝากไพ่ไม่สำเร็จ กรุณาลองใหม่");
+    }
+  };
+
+  const handleSelectLayoffTarget = (meldId: string | null) => {
+    if (!isMyTurn) return;
+    selectLayoffTarget(meldId);
+  };
+
   const canConfirmMeld = pendingMeldCardIds.length >= 3;
+  const canConfirmLayoff = pendingLayoffCardIds.length > 0 && !!targetMeldId;
   const pendingMeldSet = useMemo(
     () => new Set(pendingMeldCardIds),
     [pendingMeldCardIds]
+  );
+  const pendingLayoffSet = useMemo(
+    () => new Set(pendingLayoffCardIds),
+    [pendingLayoffCardIds]
   );
 
   const handleDiscard = async () => {
@@ -399,7 +460,12 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     pendingMeldCardIds,
     pendingMeldSet,
     canConfirmMeld,
+    pendingLayoffCardIds,
+    pendingLayoffSet,
+    canConfirmLayoff,
     isSelectingMeld,
+    isSelectingLayoff,
+    selectedLayoffMeldId: targetMeldId,
     isLoading,
     error,
     currentTurnPlayerName,
@@ -411,6 +477,11 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     onStartMeldSelection: handleStartMeldSelection,
     onCancelMeldSelection: handleCancelMeldSelection,
     onConfirmMeld: handleConfirmMeld,
+    onToggleLayoffCard: handleToggleLayoffCard,
+    onStartLayoffSelection: handleStartLayoffSelection,
+    onCancelLayoffSelection: handleCancelLayoffSelection,
+    onConfirmLayoff: handleConfirmLayoff,
+    onSelectLayoffTarget: handleSelectLayoffTarget,
     onDiscard: handleDiscard,
     onRefresh: handleRefresh,
   };

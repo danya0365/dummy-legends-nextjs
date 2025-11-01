@@ -281,6 +281,9 @@ interface GameStore extends RoomState {
   discardTop: GameCard | null;
   otherPlayers: OtherPlayer[];
   gameChannel: RealtimeChannel | null;
+  isSelectingLayoff: boolean;
+  targetMeldId: string | null;
+  pendingLayoffCardIds: string[];
 
   // Game result summary
   gameResultSummary: GameResultSummary | null;
@@ -329,6 +332,11 @@ interface GameStore extends RoomState {
   startMeldSelection: () => void;
   cancelMeldSelection: () => void;
   toggleMeldCard: (cardId: string) => void;
+  startLayoffSelection: () => void;
+  cancelLayoffSelection: () => void;
+  toggleLayoffCard: (cardId: string) => void;
+  selectLayoffTarget: (meldId: string | null) => void;
+  confirmLayoff: () => Promise<void>;
   discardCard: (cardId: string) => Promise<void>;
   subscribeToGameSession: (sessionId: string) => Promise<void>;
   unsubscribeFromGame: () => Promise<void>;
@@ -380,6 +388,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   discardTop: null,
   otherPlayers: [],
   gameChannel: null,
+  isSelectingLayoff: false,
+  targetMeldId: null,
+  pendingLayoffCardIds: [],
 
   // Initial State - Game result summary
   gameResultSummary: null,
@@ -1587,12 +1598,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({
         currentSession: session,
         myHand,
-        discardTop,
-        otherPlayers,
         myMelds,
         tableMelds,
+        discardTop,
+        otherPlayers,
         pendingMeldCardIds: [],
         isSelectingMeld: false,
+        pendingLayoffCardIds: [],
+        isSelectingLayoff: false,
+        targetMeldId: null,
       });
     } catch (error) {
       console.error("Failed to load game state:", error);
@@ -1709,6 +1723,94 @@ export const useGameStore = create<GameStore>((set, get) => ({
         isSelectingMeld: pendingMeldCardIds.length > 0,
       };
     });
+  },
+
+  startLayoffSelection: () => {
+    set({ isSelectingLayoff: true, pendingLayoffCardIds: [], targetMeldId: null });
+  },
+
+  cancelLayoffSelection: () => {
+    set({ isSelectingLayoff: false, pendingLayoffCardIds: [], targetMeldId: null });
+  },
+
+  toggleLayoffCard: (cardId: string) => {
+    set((state) => {
+      const exists = state.pendingLayoffCardIds.includes(cardId);
+      const pendingLayoffCardIds = exists
+        ? state.pendingLayoffCardIds.filter((id) => id !== cardId)
+        : [...state.pendingLayoffCardIds, cardId];
+
+      return {
+        pendingLayoffCardIds,
+        isSelectingLayoff: pendingLayoffCardIds.length > 0 || state.targetMeldId !== null,
+      };
+    });
+  },
+
+  selectLayoffTarget: (meldId: string | null) => {
+    set((state) => ({
+      targetMeldId: meldId,
+      isSelectingLayoff: state.pendingLayoffCardIds.length > 0 || !!meldId,
+    }));
+  },
+
+  confirmLayoff: async () => {
+    try {
+      const {
+        currentSession,
+        gamerId,
+        guestId,
+        pendingLayoffCardIds,
+        targetMeldId,
+        myMelds,
+        tableMelds,
+      } = get();
+
+      if (!currentSession || !gamerId) {
+        throw new Error("ไม่พบเซสชันเกม");
+      }
+
+      if (!targetMeldId) {
+        throw new Error("โปรดเลือกกองที่จะฝากไพ่");
+      }
+
+      if (!pendingLayoffCardIds.length) {
+        throw new Error("โปรดเลือกไพ่ที่จะฝากอย่างน้อย 1 ใบ");
+      }
+
+      const allMelds = [...myMelds, ...tableMelds];
+      const targetMeld = allMelds.find((meld) => meld.meldId === targetMeldId);
+
+      if (!targetMeld) {
+        throw new Error("ไม่พบกองไพ่ที่เลือก");
+      }
+
+      const meldCardIds = targetMeld.cards.map((card) => card.id);
+
+      const { error } = await supabase.rpc("layoff_cards", {
+        p_session_id: currentSession.id,
+        p_gamer_id: gamerId,
+        p_target_meld_id: targetMeldId,
+        p_target_meld_card_ids: meldCardIds,
+        p_layoff_card_ids: pendingLayoffCardIds,
+        p_guest_identifier: guestId || undefined,
+      });
+
+      if (error) throw error;
+
+      await get().loadGameState(currentSession.id);
+      set({
+        pendingLayoffCardIds: [],
+        isSelectingLayoff: false,
+        targetMeldId: null,
+      });
+    } catch (error) {
+      console.error("Failed to layoff cards:", error);
+      set({
+        error: error instanceof Error ? error.message : "ไม่สามารถฝากไพ่ได้",
+      });
+      throw error;
+    }
   },
 
   /**

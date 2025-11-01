@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   ArrowLeft,
+  HandCoins,
   RefreshCw,
   Sparkles,
   Trophy,
@@ -49,7 +50,12 @@ export function GamePlayPortrait({
   pendingMeldCardIds,
   pendingMeldSet,
   canConfirmMeld,
+  pendingLayoffCardIds,
+  pendingLayoffSet,
+  canConfirmLayoff,
   isSelectingMeld,
+  isSelectingLayoff,
+  selectedLayoffMeldId,
   isLoading,
   error,
   currentTurnPlayerName,
@@ -61,12 +67,52 @@ export function GamePlayPortrait({
   onStartMeldSelection,
   onCancelMeldSelection,
   onConfirmMeld,
+  onToggleLayoffCard,
+  onStartLayoffSelection,
+  onCancelLayoffSelection,
+  onConfirmLayoff,
+  onSelectLayoffTarget,
   onDiscard,
   onRefresh,
 }: GamePlayLayoutProps) {
   const [activePanel, setActivePanel] = useState<
     "myMelds" | "tableMelds" | "stats" | null
   >(null);
+  const resolveMeldOwnerName = useMemo(() => {
+    return (ownerId: string | null) => {
+      if (!ownerId) return "ผู้เล่น";
+      if (ownerId === gamerId) return "คุณ";
+
+      const roomPlayer = currentRoom?.players.find(
+        (player) => player.userId === ownerId
+      );
+
+      if (roomPlayer) {
+        return roomPlayer.displayName || roomPlayer.username || "ผู้เล่น";
+      }
+
+      const otherPlayer = otherPlayers.find((player) => player.gamerId === ownerId);
+      return otherPlayer?.displayName || "ผู้เล่น";
+    };
+  }, [currentRoom?.players, gamerId, otherPlayers]);
+
+  const layoffTargetOptions = useMemo(
+    () => [
+      ...myMelds.map((meld) => ({
+        id: meld.meldId,
+        label: `กองของคุณ (${meld.cards.length} ใบ)`,
+        ownerId: gamerId,
+      })),
+      ...tableMelds.map((meld) => ({
+        id: meld.meldId,
+        label: `กองของ ${resolveMeldOwnerName(meld.ownerGamerId)} (${meld.cards.length} ใบ)`,
+        ownerId: meld.ownerGamerId,
+      })),
+    ],
+    [gamerId, myMelds, tableMelds, resolveMeldOwnerName]
+  );
+
+  const availableLayoffTargets = layoffTargetOptions.length;
 
   const opponentPositions = useMemo(
     () =>
@@ -292,6 +338,38 @@ export function GamePlayPortrait({
             )}
           </div>
 
+          {isSelectingLayoff ? (
+            <>
+              <button
+                type="button"
+                onClick={onCancelLayoffSelection}
+                className="flex items-center gap-2 rounded-full bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-300 dark:bg-slate-700 dark:text-gray-100 dark:hover:bg-slate-600"
+              >
+                <XCircle className="h-4 w-4" />
+                ยกเลิกฝาก
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmLayoff}
+                disabled={!canConfirmLayoff || isLoading}
+                className="flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <HandCoins className="h-4 w-4" />
+                ฝากไพ่ ({pendingLayoffCardIds.length})
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onStartLayoffSelection}
+              disabled={!isMyTurn || availableLayoffTargets === 0}
+              className="flex items-center gap-2 rounded-full bg-indigo-100 px-5 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-200 disabled:opacity-50 dark:bg-indigo-500/20 dark:text-indigo-200 dark:hover:bg-indigo-500/30"
+            >
+              <HandCoins className="h-4 w-4" />
+              โหมดฝากไพ่
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onDiscard}
@@ -309,17 +387,48 @@ export function GamePlayPortrait({
               card={card}
               size="medium"
               onClick={() =>
-                isSelectingMeld ? onToggleMeldCard(card.id) : onSelectCard(card.id)
+                isSelectingMeld
+                  ? onToggleMeldCard(card.id)
+                  : isSelectingLayoff
+                  ? onToggleLayoffCard(card.id)
+                  : onSelectCard(card.id)
               }
               selected={
                 isSelectingMeld
                   ? pendingMeldSet.has(card.id)
+                  : isSelectingLayoff
+                  ? pendingLayoffSet.has(card.id)
                   : card.id === selectedCardId
               }
-              disabled={!isMyTurn || (!isSelectingMeld && !hasDrawn)}
+              disabled={
+                !isMyTurn || (!isSelectingMeld && !isSelectingLayoff && !hasDrawn)
+              }
             />
           ))}
         </div>
+
+        {isSelectingLayoff && layoffTargetOptions.length > 0 && (
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {layoffTargetOptions.map((target) => {
+              const isSelected = selectedLayoffMeldId === target.id;
+              return (
+                <button
+                  key={target.id}
+                  type="button"
+                  onClick={() => onSelectLayoffTarget(isSelected ? null : target.id)}
+                  disabled={availableLayoffTargets === 0}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                    isSelected
+                      ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-500/20 dark:text-indigo-200"
+                      : "border-gray-200 bg-white text-gray-700 hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-800 dark:text-gray-100 dark:hover:border-indigo-400"
+                  } ${availableLayoffTargets === 0 ? "cursor-not-allowed opacity-60" : ""}`}
+                >
+                  {target.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {guidanceMessage && (
           <p className="mt-3 text-center text-xs text-amber-700 dark:text-amber-300">
@@ -401,24 +510,30 @@ export function GamePlayPortrait({
                     ยังไม่มีผู้เล่นอื่นเกิดไพ่บนโต๊ะ
                   </p>
                 ) : (
-                  communityMelds.map((meld) => (
-                    <div
-                      key={meld.meldId}
-                      className="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/80"
-                    >
-                      <div className="mb-2 flex items-center justify-between text-sm font-medium text-gray-600 dark:text-gray-300">
-                        <span>
-                          เจ้าของกอง: {
-                            currentRoom?.players.find((player) => player.userId === meld.ownerGamerId)
-                              ?.displayName ||
-                            (meld.ownerGamerId === gamerId ? "คุณ" : "คู่แข่ง")
-                          }
-                        </span>
-                        <span>{meld.cards.length} ใบ</span>
-                      </div>
-                      {renderMeldCards(meld.cards)}
-                    </div>
-                  ))
+                  communityMelds.map((meld) => {
+                    const isTarget = selectedLayoffMeldId === meld.meldId;
+                    return (
+                      <button
+                        key={meld.meldId}
+                        type="button"
+                        onClick={() => onSelectLayoffTarget(
+                          isTarget ? null : meld.meldId
+                        )}
+                        disabled={availableLayoffTargets === 0}
+                        className={`w-full rounded-2xl border p-4 text-left shadow-sm transition ${
+                          isTarget
+                            ? "border-indigo-500 bg-indigo-50 dark:border-indigo-400 dark:bg-indigo-500/20"
+                            : "border-gray-200 bg-white/80 hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:border-indigo-400"
+                        } ${availableLayoffTargets === 0 ? "cursor-not-allowed opacity-60" : ""}`}
+                      >
+                        <div className="mb-2 flex items-center justify-between text-sm font-medium text-gray-600 dark:text-gray-300">
+                          <span>{resolveMeldOwnerName(meld.ownerGamerId)}</span>
+                          <span>{meld.cards.length} ใบ</span>
+                        </div>
+                        {renderMeldCards(meld.cards)}
+                      </button>
+                    );
+                  })
                 )}
               </div>
             )}

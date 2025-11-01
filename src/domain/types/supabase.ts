@@ -1179,6 +1179,17 @@ export type Database = {
         }
         Returns: string
       }
+      layoff_cards: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_target_meld_id: string
+          p_target_meld_card_ids: string[]
+          p_layoff_card_ids: string[]
+          p_guest_identifier?: string
+        }
+        Returns: undefined
+      }
       leave_game_room: {
         Args: {
           p_gamer_id: string

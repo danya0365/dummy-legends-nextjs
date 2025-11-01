@@ -775,6 +775,321 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =====================================================
+-- LAY OFF CARDS
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.layoff_cards(
+  p_session_id UUID,
+  p_gamer_id UUID,
+  p_target_meld_id UUID,
+  p_target_meld_card_ids UUID[],
+  p_layoff_card_ids UUID[],
+  p_guest_identifier TEXT DEFAULT NULL
+)
+RETURNS VOID AS $$
+DECLARE
+  v_can_access BOOLEAN;
+  v_current_turn UUID;
+  v_target_meld RECORD;
+  v_target_cards_count INTEGER;
+  v_target_owner UUID;
+  v_target_suit TEXT;
+  v_target_rank public.card_rank;
+  v_existing_rank_orders INTEGER[] := '{}';
+  v_new_rank_orders INTEGER[] := '{}';
+  v_combined_rank_orders INTEGER[] := '{}';
+  v_new_cards UUID[] := '{}';
+  v_new_cards_count INTEGER := 0;
+  v_new_suit_count INTEGER := 0;
+  v_new_min_suit TEXT;
+  v_new_max_suit TEXT;
+  v_score_value INTEGER := 0;
+  v_speto_card_ids UUID[] := '{}';
+  v_move_number INTEGER;
+  v_metadata JSONB;
+  v_total_cards INTEGER := 0;
+BEGIN
+  IF p_layoff_card_ids IS NULL OR array_length(p_layoff_card_ids, 1) = 0 THEN
+    RAISE EXCEPTION 'Layoff requires at least one card';
+  END IF;
+
+  v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
+  IF NOT v_can_access THEN
+    RAISE EXCEPTION 'Not authorized';
+  END IF;
+
+  SELECT current_turn_gamer_id
+  INTO v_current_turn
+  FROM public.game_sessions
+  WHERE id = p_session_id
+  FOR UPDATE;
+
+  IF v_current_turn IS DISTINCT FROM p_gamer_id THEN
+    RAISE EXCEPTION 'Not your turn';
+  END IF;
+
+  SELECT
+    gm.id,
+    gm.session_id,
+    gm.gamer_id,
+    gm.meld_type,
+    gm.metadata,
+    gm.score_value
+  INTO v_target_meld
+  FROM public.game_melds gm
+  WHERE gm.id = p_target_meld_id
+    AND gm.session_id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target meld not found';
+  END IF;
+
+  v_target_owner := v_target_meld.gamer_id;
+
+  SELECT COUNT(*)
+  INTO v_target_cards_count
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND meld_id = p_target_meld_id
+  FOR UPDATE;
+
+  IF v_target_cards_count = 0 THEN
+    RAISE EXCEPTION 'Target meld has no cards';
+  END IF;
+
+  -- Ensure layoff cards are unique and belong to the player
+  IF EXISTS (
+    SELECT 1
+    FROM public.game_cards
+    WHERE session_id = p_session_id
+      AND id = ANY(p_layoff_card_ids)
+      AND NOT (owner_gamer_id = p_gamer_id AND location = 'hand')
+  ) THEN
+    RAISE EXCEPTION 'Layoff cards must be in your hand';
+  END IF;
+
+  SELECT
+    array_agg(gc.id ORDER BY gc.id),
+    array_agg(public.get_card_rank_order(gc.rank) ORDER BY gc.id),
+    COUNT(DISTINCT gc.suit),
+    MIN(gc.suit),
+    MAX(gc.suit),
+    MIN(gc.rank)
+  INTO v_new_cards, v_new_rank_orders, v_new_suit_count, v_new_min_suit, v_new_max_suit, v_target_rank
+  FROM public.game_cards gc
+  WHERE gc.session_id = p_session_id
+    AND gc.id = ANY(p_layoff_card_ids)
+  FOR UPDATE;
+
+  IF v_new_cards IS NULL OR array_length(v_new_cards, 1) <> array_length(p_layoff_card_ids, 1) THEN
+    RAISE EXCEPTION 'Some layoff cards were not found';
+  END IF;
+
+  v_new_cards_count := array_length(v_new_cards, 1);
+
+  SELECT
+    MIN(gc.suit),
+    MAX(gc.suit),
+    COUNT(DISTINCT gc.suit),
+    array_agg(public.get_card_rank_order(gc.rank) ORDER BY COALESCE(gc.meld_card_index, 9999), gc.id)
+  INTO v_target_suit, v_new_max_suit, v_new_suit_count, v_existing_rank_orders
+  FROM public.game_cards gc
+  WHERE gc.session_id = p_session_id
+    AND gc.meld_id = p_target_meld_id;
+
+  IF v_target_meld.meld_type = 'set' THEN
+    SELECT DISTINCT rank INTO v_target_rank
+    FROM public.game_cards
+    WHERE session_id = p_session_id
+      AND meld_id = p_target_meld_id
+    LIMIT 1;
+
+    IF EXISTS (
+      SELECT 1
+      FROM public.game_cards
+      WHERE session_id = p_session_id
+        AND id = ANY(p_layoff_card_ids)
+        AND rank IS DISTINCT FROM v_target_rank
+    ) THEN
+      RAISE EXCEPTION 'Layoff cards must match set rank';
+    END IF;
+  ELSE
+    -- Run validation
+    SELECT DISTINCT suit INTO v_target_suit
+    FROM public.game_cards
+    WHERE session_id = p_session_id
+      AND meld_id = p_target_meld_id
+    LIMIT 1;
+
+    IF v_target_suit IS NULL THEN
+      RAISE EXCEPTION 'Target run has invalid cards';
+    END IF;
+
+    IF v_new_suit_count <> 1 OR v_new_min_suit IS DISTINCT FROM v_target_suit OR v_new_max_suit IS DISTINCT FROM v_target_suit THEN
+      RAISE EXCEPTION 'Layoff cards must match run suit';
+    END IF;
+
+    SELECT array_agg(val ORDER BY val)
+    INTO v_combined_rank_orders
+    FROM unnest(array_cat(v_existing_rank_orders, v_new_rank_orders)) AS val;
+
+    v_total_cards := array_length(v_combined_rank_orders, 1);
+    IF v_total_cards <> array_length(v_existing_rank_orders, 1) + array_length(v_new_rank_orders, 1) THEN
+      RAISE EXCEPTION 'Run cannot contain duplicate ranks';
+    END IF;
+
+    FOR i IN 2..v_total_cards LOOP
+      IF v_combined_rank_orders[i] <> v_combined_rank_orders[i - 1] + 1 THEN
+        RAISE EXCEPTION 'Run must remain consecutive';
+      END IF;
+    END LOOP;
+  END IF;
+
+  -- Move cards to meld
+  UPDATE public.game_cards
+  SET location = 'meld',
+      owner_gamer_id = v_target_owner,
+      meld_id = p_target_meld_id,
+      meld_card_index = NULL,
+      position_in_location = NULL,
+      updated_at = NOW()
+  WHERE session_id = p_session_id
+    AND id = ANY(p_layoff_card_ids);
+
+  -- Update order within meld
+  WITH ordered AS (
+    SELECT
+      gc.id,
+      ROW_NUMBER() OVER (
+        ORDER BY
+          CASE
+            WHEN v_target_meld.meld_type = 'run' THEN public.get_card_rank_order(gc.rank)
+            ELSE gc.rank::TEXT
+          END,
+          gc.suit,
+          gc.id
+      ) - 1 AS new_index
+    FROM public.game_cards gc
+    WHERE gc.session_id = p_session_id
+      AND gc.meld_id = p_target_meld_id
+  )
+  UPDATE public.game_cards gc
+  SET meld_card_index = ordered.new_index,
+      updated_at = NOW()
+  FROM ordered
+  WHERE gc.id = ordered.id;
+
+  -- Update hand count
+  UPDATE public.game_hands
+  SET card_count = card_count - v_new_cards_count,
+      updated_at = NOW()
+  WHERE session_id = p_session_id
+    AND gamer_id = p_gamer_id;
+
+  -- Recalculate score and metadata
+  SELECT
+    COALESCE(SUM(card_value), 0),
+    COALESCE(array_agg(id) FILTER (WHERE is_speto), '{}')
+  INTO v_score_value, v_speto_card_ids
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND id = ANY(p_layoff_card_ids);
+
+  v_metadata := COALESCE(v_target_meld.metadata, '{}'::jsonb);
+  v_metadata := jsonb_set(
+    v_metadata,
+    '{card_ids}',
+    COALESCE(v_metadata -> 'card_ids', '[]'::jsonb) || to_jsonb(p_layoff_card_ids),
+    true
+  );
+  IF array_length(v_speto_card_ids, 1) > 0 THEN
+    v_metadata := jsonb_set(
+      v_metadata,
+      '{speto_card_ids}',
+      COALESCE(v_metadata -> 'speto_card_ids', '[]'::jsonb) || to_jsonb(v_speto_card_ids),
+      true
+    );
+  END IF;
+
+  UPDATE public.game_melds
+  SET metadata = v_metadata,
+      score_value = COALESCE(score_value, 0) + v_score_value + (array_length(v_speto_card_ids, 1) * 50)
+  WHERE id = p_target_meld_id;
+
+  -- Score events
+  IF v_score_value > 0 THEN
+    INSERT INTO public.game_score_events (
+      session_id,
+      gamer_id,
+      event_type,
+      points,
+      related_meld_id,
+      related_card_ids,
+      metadata
+    ) VALUES (
+      p_session_id,
+      p_gamer_id,
+      'meld_points',
+      v_score_value,
+      p_target_meld_id,
+      p_layoff_card_ids,
+      jsonb_build_object(
+        'action', 'layoff',
+        'target_meld_id', p_target_meld_id
+      )
+    );
+  END IF;
+
+  IF array_length(v_speto_card_ids, 1) > 0 THEN
+    INSERT INTO public.game_score_events (
+      session_id,
+      gamer_id,
+      event_type,
+      points,
+      related_meld_id,
+      related_card_ids,
+      metadata
+    ) VALUES (
+      p_session_id,
+      p_gamer_id,
+      'spe_to_deposit_bonus',
+      50 * array_length(v_speto_card_ids, 1),
+      p_target_meld_id,
+      v_speto_card_ids,
+      jsonb_build_object(
+        'action', 'layoff',
+        'target_meld_id', p_target_meld_id
+      )
+    );
+  END IF;
+
+  -- Record move
+  SELECT COALESCE(MAX(move_number), 0) + 1
+  INTO v_move_number
+  FROM public.game_moves
+  WHERE session_id = p_session_id;
+
+  INSERT INTO public.game_moves (
+    session_id,
+    gamer_id,
+    move_type,
+    move_number,
+    move_data
+  ) VALUES (
+    p_session_id,
+    p_gamer_id,
+    'lay_off',
+    v_move_number,
+    jsonb_build_object(
+      'target_meld_id', p_target_meld_id,
+      'card_ids', p_layoff_card_ids
+    )
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =====================================================
 -- THAI DUMMY SCORING HELPERS
 -- =====================================================
 
