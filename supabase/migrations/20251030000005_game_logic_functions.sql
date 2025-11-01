@@ -182,6 +182,10 @@ DECLARE
   v_can_access BOOLEAN;
   v_current_turn UUID;
   v_hand_count INTEGER;
+  v_discard_count INTEGER;
+  v_discard_top_card_id UUID;
+  v_discard_cards UUID[];
+  v_position INTEGER := 0;
 BEGIN
   -- Check access
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
@@ -209,7 +213,7 @@ BEGIN
   --
   -- Commented out hand count check to allow drawing from discard when hand is full
   
-  -- Draw from deck
+  -- Try to draw from deck
   SELECT id INTO v_card_id
   FROM public.game_cards
   WHERE session_id = p_session_id
@@ -217,8 +221,59 @@ BEGIN
   ORDER BY position_in_location
   LIMIT 1;
 
+  -- If deck is empty, reshuffle discard pile (except top card)
   IF v_card_id IS NULL THEN
-    RAISE EXCEPTION 'Deck is empty';
+    -- Get discard pile top card
+    SELECT discard_pile_top_card_id INTO v_discard_top_card_id
+    FROM public.game_sessions
+    WHERE id = p_session_id;
+    
+    -- Count cards in discard pile (excluding top card)
+    SELECT COUNT(*) INTO v_discard_count
+    FROM public.game_cards
+    WHERE session_id = p_session_id
+      AND location = 'discard'
+      AND id != COALESCE(v_discard_top_card_id, '00000000-0000-0000-0000-000000000000'::UUID);
+    
+    -- If no cards available to reshuffle, game is stuck
+    IF v_discard_count = 0 THEN
+      RAISE EXCEPTION 'Both deck and discard pile are empty - cannot continue';
+    END IF;
+    
+    -- Get all discard cards except top card
+    SELECT array_agg(id) INTO v_discard_cards
+    FROM public.game_cards
+    WHERE session_id = p_session_id
+      AND location = 'discard'
+      AND id != COALESCE(v_discard_top_card_id, '00000000-0000-0000-0000-000000000000'::UUID);
+    
+    -- Shuffle the discard cards (Fisher-Yates)
+    FOR i IN REVERSE array_length(v_discard_cards, 1)..2 LOOP
+      DECLARE
+        v_j INTEGER := floor(random() * i + 1)::INTEGER;
+        v_temp UUID := v_discard_cards[i];
+      BEGIN
+        v_discard_cards[i] := v_discard_cards[v_j];
+        v_discard_cards[v_j] := v_temp;
+      END;
+    END LOOP;
+    
+    -- Move shuffled cards back to deck
+    FOR i IN 1..array_length(v_discard_cards, 1) LOOP
+      UPDATE public.game_cards
+      SET location = 'deck',
+          position_in_location = i - 1,
+          updated_at = NOW()
+      WHERE id = v_discard_cards[i];
+    END LOOP;
+    
+    -- Update remaining deck cards count
+    UPDATE public.game_sessions
+    SET remaining_deck_cards = array_length(v_discard_cards, 1)
+    WHERE id = p_session_id;
+    
+    -- Now draw the first card from the reshuffled deck
+    v_card_id := v_discard_cards[1];
   END IF;
 
   -- Update remaining deck cards
@@ -253,7 +308,8 @@ BEGIN
     (SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id),
     jsonb_build_object(
       'card_id', v_card_id,
-      'from_deck', true
+      'from_deck', true,
+      'reshuffled', v_discard_count > 0
     )
   );
   
