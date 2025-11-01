@@ -20,6 +20,15 @@ import type {
   OtherPlayer,
   PlayerMeld,
   TableMeld,
+  GameResultSummary,
+  GameResultPlayerSummary,
+  GameResultMeld,
+  GameScoreEventEntry,
+  GameResultRow,
+  GameResultPlayerRow,
+  GameScoreEventRow,
+  GameMeldRow,
+  DeadwoodCardDetail,
 } from "@/src/domain/types/gameplay.types";
 import type { Json } from "@/src/domain/types/supabase";
 import { supabaseClient as supabase } from "@/src/infrastructure/supabase/client";
@@ -66,6 +75,10 @@ const mapGameCardRow = (card: GameCardRow): GameCard => ({
   location: card.location as GameCard["location"],
   ownerId: card.owner_gamer_id,
   position: card.position_in_location ?? 0,
+  meldId: card.meld_id ?? null,
+  isHead: card.is_head ?? false,
+  isSpeto: card.is_speto ?? false,
+  meldCardIndex: card.meld_card_index ?? null,
 });
 
 const mapPlayerMeld = (meld: {
@@ -268,6 +281,14 @@ interface GameStore extends RoomState {
   otherPlayers: OtherPlayer[];
   gameChannel: RealtimeChannel | null;
 
+  // Game result summary
+  gameResultSummary: GameResultSummary | null;
+  gameResultPlayers: GameResultPlayerSummary[];
+  gameResultMelds: GameResultMeld[];
+  gameScoreEvents: GameScoreEventEntry[];
+  isLoadingResultSummary: boolean;
+  resultSummaryError: string | null;
+
   // Actions - Room
   initializeGamer: () => Promise<void>;
   createRoom: (data: CreateRoomData) => Promise<GameRoom>;
@@ -309,6 +330,9 @@ interface GameStore extends RoomState {
   subscribeToGameSession: (sessionId: string) => Promise<void>;
   unsubscribeFromGame: () => Promise<void>;
   getActiveSessionForRoom: (roomId: string) => Promise<string | null>;
+  loadGameResultSummary: (sessionId: string) => Promise<void>;
+  loadGameResultSummaryForRoom: (roomId: string) => Promise<void>;
+  resetGameResultSummary: () => void;
 }
 
 /**
@@ -344,6 +368,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   discardTop: null,
   otherPlayers: [],
   gameChannel: null,
+
+  // Initial State - Game result summary
+  gameResultSummary: null,
+  gameResultPlayers: [],
+  gameResultMelds: [],
+  gameScoreEvents: [],
+  isLoadingResultSummary: false,
+  resultSummaryError: null,
 
   /**
    * Initialize gamer (guest or authenticated)
@@ -1068,44 +1100,242 @@ export const useGameStore = create<GameStore>((set, get) => ({
         await get().initializeGamer();
       }
 
-      const resolvedGamerId = get().gamerId!;
-      const resolvedGuestId = get().guestId;
-
-      const { data: sessionId, error } = await supabase.rpc(
-        "get_active_session_for_room",
-        {
-          p_room_id: roomId,
-          p_gamer_id: resolvedGamerId,
-          p_guest_identifier: resolvedGuestId || undefined,
-        }
-      );
-
-      if (error) throw error;
-      if (!sessionId) {
+      const resolvedGamerId = get().gamerId;
+      if (!resolvedGamerId) {
         return null;
       }
 
-      return sessionId;
+      const resolvedGuestId = get().guestId;
+
+      const { data, error } = await supabase.rpc("get_active_session_for_room", {
+        p_room_id: roomId,
+        p_gamer_id: resolvedGamerId,
+        p_guest_identifier: resolvedGuestId || undefined,
+      });
+
+      if (error) throw error;
+      return (data as string | null) ?? null;
     } catch (error) {
       console.error("Failed to fetch active session:", error);
       return null;
     }
   },
-
-  /**
-   * Get cached or remote active session for current room
-   */
   getActiveSessionForRoom: async (roomId: string) => {
-    const { currentSession } = get();
-    if (
-      currentSession &&
-      currentSession.roomId === roomId &&
-      currentSession.isActive
-    ) {
-      return currentSession.id;
-    }
-
     return get().fetchActiveSessionForRoom(roomId);
+  },
+  loadGameResultSummary: async (sessionId: string) => {
+    set({ isLoadingResultSummary: true, resultSummaryError: null });
+
+    try {
+      const { gamerId, guestId } = get();
+      if (!gamerId) {
+        await get().initializeGamer();
+      }
+
+      const resolvedGamerId = get().gamerId;
+      if (!resolvedGamerId) {
+        throw new Error("ไม่สามารถระบุผู้เล่นได้");
+      }
+
+      type SummaryPayload = {
+        result: GameResultRow | null;
+        players: GameResultPlayerRow[];
+        melds: Array<
+          GameMeldRow & {
+            game_cards?: GameCardRow[];
+          }
+        >;
+        events: GameScoreEventRow[];
+        remaining_cards: GameCardRow[];
+      };
+
+      const { data, error } = await supabase.rpc(
+        "get_game_result_summary",
+        {
+          p_session_id: sessionId,
+          p_gamer_id: resolvedGamerId,
+          p_guest_identifier: guestId || undefined,
+        }
+      );
+
+      if (error) throw error;
+
+      const payload = data as SummaryPayload | null;
+
+      if (!payload || !payload.result) {
+        set({
+          gameResultSummary: null,
+          gameResultPlayers: [],
+          gameResultMelds: [],
+          gameScoreEvents: [],
+          isLoadingResultSummary: false,
+          resultSummaryError: "ไม่พบข้อมูลสรุปเกม",
+        });
+        return;
+      }
+
+      const remainingCardRows = Array.isArray(payload.remaining_cards)
+        ? payload.remaining_cards
+        : [];
+      const playerRows = Array.isArray(payload.players) ? payload.players : [];
+      const meldRows = Array.isArray(payload.melds) ? payload.melds : [];
+      const eventRows = Array.isArray(payload.events) ? payload.events : [];
+
+      const remainingCardsMap = new Map<string, GameCard>();
+      remainingCardRows.forEach((card) => {
+        remainingCardsMap.set(card.id, mapGameCardRow(card));
+      });
+
+      const mapSummary = (row: GameResultRow): GameResultSummary => ({
+        id: row.id,
+        sessionId: row.session_id ?? "",
+        roomId: row.room_id,
+        winnerGamerId: row.winner_gamer_id,
+        winningType: row.winning_type,
+        totalRounds: row.total_rounds,
+        totalMoves: row.total_moves,
+        durationSeconds: row.game_duration_seconds,
+        createdAt: row.created_at,
+        summaryMetadata: (row.summary_metadata as Record<string, unknown>) ?? {},
+        eloChanges: (row.elo_changes as Record<string, unknown>) ?? {},
+      });
+
+      const mapScoreEvent = (row: GameScoreEventRow): GameScoreEventEntry => ({
+        id: row.id,
+        sessionId: row.session_id,
+        gamerId: row.gamer_id,
+        eventType: row.event_type,
+        points: row.points,
+        relatedMeldId: row.related_meld_id,
+        relatedCardIds: row.related_card_ids ?? [],
+        metadata: (row.metadata as Record<string, unknown>) ?? {},
+        createdAt: row.created_at,
+      });
+
+      const mapMeld = (
+        row: GameMeldRow & { game_cards?: GameCardRow[] }
+      ): GameResultMeld => ({
+        id: row.id,
+        sessionId: row.session_id,
+        gamerId: row.gamer_id,
+        meldType: row.meld_type as GameResultMeld["meldType"],
+        createdFromHead: row.created_from_head,
+        includesSpeto: row.includes_speto,
+        scoreValue: row.score_value,
+        metadata: (row.metadata as Record<string, unknown>) ?? {},
+        createdAt: row.created_at,
+        cards: (row.game_cards ?? []).map(mapGameCardRow),
+      });
+
+      const mapPlayer = (row: GameResultPlayerRow): GameResultPlayerSummary => {
+        const metadata = (row.metadata as Record<string, unknown>) ?? {};
+        const deadwoodCardsRaw = Array.isArray(metadata.deadwood_cards)
+          ? (metadata.deadwood_cards as DeadwoodCardDetail[])
+          : [];
+
+        const remainingCards = (row.remaining_card_ids ?? [])
+          .map((cardId) => remainingCardsMap.get(cardId))
+          .filter((card): card is GameCard => !!card);
+
+        return {
+          id: row.id,
+          resultId: row.result_id,
+          gamerId: row.gamer_id,
+          position: row.position,
+          totalPoints: row.total_points,
+          meldPoints: row.meld_points ?? 0,
+          bonusPoints: row.bonus_points ?? 0,
+          penaltyPoints: row.penalty_points ?? 0,
+          handPoints: row.hand_points ?? 0,
+          isWinner: row.is_winner,
+          specialEvents: row.special_events ?? [],
+          displayedMeldIds: row.displayed_meld_ids ?? [],
+          remainingCardIds: row.remaining_card_ids ?? [],
+          remainingCards,
+          metadata,
+          deadwoodScore:
+            typeof metadata.deadwood_score === "number" ? metadata.deadwood_score : 0,
+          deadwoodCards: deadwoodCardsRaw,
+          createdAt: row.created_at,
+        };
+      };
+
+      set({
+        gameResultSummary: mapSummary(payload.result),
+        gameResultPlayers: playerRows.map(mapPlayer),
+        gameResultMelds: meldRows.map(mapMeld),
+        gameScoreEvents: eventRows.map(mapScoreEvent),
+        isLoadingResultSummary: false,
+        resultSummaryError: null,
+      });
+    } catch (error) {
+      console.error("Failed to load game result summary:", error);
+      set({
+        isLoadingResultSummary: false,
+        resultSummaryError:
+          error instanceof Error ? error.message : "ไม่สามารถโหลดข้อมูลสรุปเกมได้",
+      });
+    }
+  },
+  loadGameResultSummaryForRoom: async (roomId: string) => {
+    set({ isLoadingResultSummary: true, resultSummaryError: null });
+
+    try {
+      const { gamerId, guestId } = get();
+      if (!gamerId) {
+        await get().initializeGamer();
+      }
+
+      const resolvedGamerId = get().gamerId;
+      if (!resolvedGamerId) {
+        throw new Error("ไม่สามารถระบุผู้เล่นได้");
+      }
+
+      const { data, error } = await supabase.rpc(
+        "get_latest_game_result_for_room",
+        {
+          p_room_id: roomId,
+          p_gamer_id: resolvedGamerId,
+          p_guest_identifier: guestId || undefined,
+        }
+      );
+
+      if (error) throw error;
+
+      const sessionId =
+        Array.isArray(data) && data.length > 0 ? data[0]?.session_id : null;
+
+      if (!sessionId) {
+        set({
+          gameResultSummary: null,
+          gameResultPlayers: [],
+          gameResultMelds: [],
+          gameScoreEvents: [],
+          isLoadingResultSummary: false,
+          resultSummaryError: "ไม่พบข้อมูลสรุปเกม",
+        });
+        return;
+      }
+
+      await get().loadGameResultSummary(sessionId);
+    } catch (error) {
+      console.error("Failed to load game result summary by room:", error);
+      set({
+        isLoadingResultSummary: false,
+        resultSummaryError:
+          error instanceof Error ? error.message : "ไม่สามารถโหลดข้อมูลสรุปเกมได้",
+      });
+    }
+  },
+  resetGameResultSummary: () => {
+    set({
+      gameResultSummary: null,
+      gameResultPlayers: [],
+      gameResultMelds: [],
+      gameScoreEvents: [],
+      isLoadingResultSummary: false,
+      resultSummaryError: null,
+    });
   },
 
   /**

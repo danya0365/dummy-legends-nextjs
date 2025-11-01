@@ -15,6 +15,10 @@ export interface GameCard {
   location: "deck" | "discard" | "hand" | "meld";
   ownerId: string | null;
   position: number;
+  meldId?: string | null;
+  isHead?: boolean;
+  isSpeto?: boolean;
+  meldCardIndex?: number | null;
 }
 
 export interface GameSession {
@@ -58,6 +62,71 @@ export interface TableMeld {
   createdAt?: string | null;
 }
 
+export interface DeadwoodCardDetail {
+  cardId: string;
+  score: number;
+}
+
+export interface GameResultSummary {
+  id: string;
+  sessionId: string;
+  roomId: string;
+  winnerGamerId: string | null;
+  winningType: string | null;
+  totalRounds: number;
+  totalMoves: number;
+  durationSeconds: number;
+  createdAt: string | null;
+  summaryMetadata: Record<string, unknown>;
+  eloChanges: Record<string, unknown>;
+}
+
+export interface GameResultPlayerSummary {
+  id: string;
+  resultId: string;
+  gamerId: string;
+  position: number;
+  totalPoints: number;
+  meldPoints: number;
+  bonusPoints: number;
+  penaltyPoints: number;
+  handPoints: number;
+  isWinner: boolean;
+  specialEvents: string[];
+  displayedMeldIds: string[];
+  remainingCardIds: string[];
+  remainingCards: GameCard[];
+  metadata: Record<string, unknown>;
+  deadwoodScore: number;
+  deadwoodCards: DeadwoodCardDetail[];
+  createdAt: string | null;
+}
+
+export interface GameScoreEventEntry {
+  id: string;
+  sessionId: string;
+  gamerId: string;
+  eventType: string;
+  points: number;
+  relatedMeldId: string | null;
+  relatedCardIds: string[];
+  metadata: Record<string, unknown>;
+  createdAt: string | null;
+}
+
+export interface GameResultMeld {
+  id: string;
+  sessionId: string;
+  gamerId: string;
+  meldType: "set" | "run";
+  createdFromHead: boolean;
+  includesSpeto: boolean;
+  scoreValue: number;
+  metadata: Record<string, unknown>;
+  createdAt: string | null;
+  cards: GameCard[];
+}
+
 export interface OtherPlayer {
   gamerId: string;
   cardCount: number;
@@ -78,6 +147,12 @@ export interface GameState {
 
 export type GameSessionRow = Database["public"]["Tables"]["game_sessions"]["Row"];
 export type GameCardRow = Database["public"]["Tables"]["game_cards"]["Row"];
+export type GameResultRow = Database["public"]["Tables"]["game_results"]["Row"];
+export type GameResultPlayerRow =
+  Database["public"]["Tables"]["game_result_players"]["Row"];
+export type GameScoreEventRow =
+  Database["public"]["Tables"]["game_score_events"]["Row"];
+export type GameMeldRow = Database["public"]["Tables"]["game_melds"]["Row"];
 
 export interface GameStateOtherPlayerSummary {
   gamer_id: string;

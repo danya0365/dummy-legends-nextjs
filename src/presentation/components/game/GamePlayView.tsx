@@ -2,7 +2,7 @@
 
 import { useGameStore } from "@/src/stores/gameStore";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GamePlayLandscape } from "./game-play/GamePlayLandscape";
 import { GamePlayPortrait } from "./game-play/GamePlayPortrait";
 import { GamePlaySimpleView } from "./game-play/GamePlaySimpleView";
@@ -38,6 +38,7 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
     unsubscribeFromGame,
     isLoading,
     error,
+    loadGameResultSummaryForRoom,
   } = useGameStore();
 
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -329,6 +330,39 @@ export function GamePlayView({ sessionId }: GamePlayViewProps) {
   const handleRefresh = useCallback(() => {
     return loadGameState(sessionId);
   }, [loadGameState, sessionId]);
+
+  const hasNavigatedToResult = useRef(false);
+
+  useEffect(() => {
+    hasNavigatedToResult.current = false;
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (
+      !isGameFinished ||
+      !currentSession?.id ||
+      !currentSession.roomId ||
+      hasNavigatedToResult.current
+    ) {
+      return;
+    }
+
+    hasNavigatedToResult.current = true;
+
+    const roomId = currentSession.roomId;
+    const finishedSessionId = currentSession.id;
+
+    void loadGameResultSummaryForRoom(roomId);
+
+    const query = new URLSearchParams({ sessionId: finishedSessionId }).toString();
+    router.push(`/game/room/${roomId}/result?${query}`);
+  }, [
+    isGameFinished,
+    currentSession?.id,
+    currentSession?.roomId,
+    loadGameResultSummaryForRoom,
+    router,
+  ]);
 
   if (!currentSession) {
     return (

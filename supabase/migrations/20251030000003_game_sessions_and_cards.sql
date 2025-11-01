@@ -52,6 +52,25 @@ CREATE TABLE IF NOT EXISTS public.game_hands (
 );
 
 -- =====================================================
+-- GAME MELDS TABLE
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS public.game_melds (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+  session_id UUID NOT NULL REFERENCES public.game_sessions(id) ON DELETE CASCADE,
+  gamer_id UUID NOT NULL REFERENCES public.gamers(id) ON DELETE CASCADE,
+
+  meld_type public.meld_type NOT NULL,
+  created_from_head BOOLEAN NOT NULL DEFAULT false,
+  includes_speto BOOLEAN NOT NULL DEFAULT false,
+  score_value INTEGER NOT NULL DEFAULT 0,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =====================================================
 -- GAME CARDS TABLE
 -- =====================================================
 
@@ -68,7 +87,8 @@ CREATE TABLE IF NOT EXISTS public.game_cards (
   owner_gamer_id UUID REFERENCES public.gamers(id) ON DELETE SET NULL,
   
   position_in_location INTEGER,
-  meld_id UUID,
+  meld_id UUID REFERENCES public.game_melds(id) ON DELETE SET NULL,
+  meld_card_index INTEGER,
   is_head BOOLEAN NOT NULL DEFAULT false,
   is_speto BOOLEAN NOT NULL DEFAULT false,
   
@@ -108,13 +128,59 @@ CREATE TABLE IF NOT EXISTS public.game_results (
   winner_gamer_id UUID REFERENCES public.gamers(id) ON DELETE SET NULL,
   winning_type TEXT,
   
-  final_scores JSONB NOT NULL,
   total_rounds INTEGER NOT NULL,
   total_moves INTEGER NOT NULL,
   game_duration_seconds INTEGER NOT NULL,
   
   elo_changes JSONB,
+  summary_metadata JSONB DEFAULT '{}'::jsonb,
   
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =====================================================
+-- GAME RESULT PLAYERS TABLE
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS public.game_result_players (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+  result_id UUID NOT NULL REFERENCES public.game_results(id) ON DELETE CASCADE,
+  gamer_id UUID NOT NULL REFERENCES public.gamers(id) ON DELETE CASCADE,
+
+  position INTEGER NOT NULL,
+  total_points INTEGER NOT NULL,
+  meld_points INTEGER NOT NULL DEFAULT 0,
+  bonus_points INTEGER NOT NULL DEFAULT 0,
+  penalty_points INTEGER NOT NULL DEFAULT 0,
+  hand_points INTEGER NOT NULL DEFAULT 0,
+  is_winner BOOLEAN NOT NULL DEFAULT false,
+  special_events TEXT[] NOT NULL DEFAULT '{}',
+  displayed_meld_ids UUID[] NOT NULL DEFAULT '{}',
+  remaining_card_ids UUID[] NOT NULL DEFAULT '{}',
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  CONSTRAINT result_players_unique UNIQUE (result_id, gamer_id)
+);
+
+-- =====================================================
+-- GAME SCORE EVENTS TABLE
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS public.game_score_events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+  session_id UUID NOT NULL REFERENCES public.game_sessions(id) ON DELETE CASCADE,
+  gamer_id UUID NOT NULL REFERENCES public.gamers(id) ON DELETE CASCADE,
+  event_type public.score_event_type NOT NULL,
+
+  points INTEGER NOT NULL,
+  related_meld_id UUID REFERENCES public.game_melds(id) ON DELETE SET NULL,
+  related_card_ids UUID[] NOT NULL DEFAULT '{}',
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -155,6 +221,11 @@ CREATE INDEX idx_game_hands_session ON public.game_hands(session_id);
 CREATE INDEX idx_game_cards_session ON public.game_cards(session_id);
 CREATE INDEX idx_game_cards_location ON public.game_cards(location);
 CREATE INDEX idx_game_cards_owner ON public.game_cards(owner_gamer_id);
+CREATE INDEX idx_game_cards_meld ON public.game_cards(meld_id);
+CREATE INDEX idx_game_melds_session ON public.game_melds(session_id);
+CREATE INDEX idx_game_score_events_session ON public.game_score_events(session_id);
+CREATE INDEX idx_game_score_events_gamer ON public.game_score_events(gamer_id);
+CREATE INDEX idx_game_result_players_result ON public.game_result_players(result_id);
 CREATE INDEX idx_game_moves_session ON public.game_moves(session_id);
 CREATE INDEX idx_game_moves_gamer ON public.game_moves(gamer_id);
 

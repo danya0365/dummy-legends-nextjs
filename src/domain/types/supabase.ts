@@ -14,7 +14,10 @@ export type Database = {
           card_value: number
           created_at: string | null
           id: string
+          is_head: boolean
+          is_speto: boolean
           location: string
+          meld_card_index: number | null
           meld_id: string | null
           owner_gamer_id: string | null
           position_in_location: number | null
@@ -27,7 +30,10 @@ export type Database = {
           card_value: number
           created_at?: string | null
           id?: string
+          is_head?: boolean
+          is_speto?: boolean
           location: string
+          meld_card_index?: number | null
           meld_id?: string | null
           owner_gamer_id?: string | null
           position_in_location?: number | null
@@ -40,7 +46,10 @@ export type Database = {
           card_value?: number
           created_at?: string | null
           id?: string
+          is_head?: boolean
+          is_speto?: boolean
           location?: string
+          meld_card_index?: number | null
           meld_id?: string | null
           owner_gamer_id?: string | null
           position_in_location?: number | null
@@ -50,6 +59,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "game_cards_meld_id_fkey"
+            columns: ["meld_id"]
+            isOneToOne: false
+            referencedRelation: "game_melds"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "game_cards_owner_gamer_id_fkey"
             columns: ["owner_gamer_id"]
@@ -114,6 +130,57 @@ export type Database = {
           },
         ]
       }
+      game_melds: {
+        Row: {
+          created_at: string | null
+          created_from_head: boolean
+          gamer_id: string
+          id: string
+          includes_speto: boolean
+          meld_type: Database["public"]["Enums"]["meld_type"]
+          metadata: Json
+          score_value: number
+          session_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_from_head?: boolean
+          gamer_id: string
+          id?: string
+          includes_speto?: boolean
+          meld_type: Database["public"]["Enums"]["meld_type"]
+          metadata?: Json
+          score_value?: number
+          session_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_from_head?: boolean
+          gamer_id?: string
+          id?: string
+          includes_speto?: boolean
+          meld_type?: Database["public"]["Enums"]["meld_type"]
+          metadata?: Json
+          score_value?: number
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_melds_gamer_id_fkey"
+            columns: ["gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_melds_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       game_moves: {
         Row: {
           created_at: string | null
@@ -162,15 +229,84 @@ export type Database = {
           },
         ]
       }
+      game_result_players: {
+        Row: {
+          bonus_points: number
+          created_at: string | null
+          displayed_meld_ids: string[]
+          gamer_id: string
+          hand_points: number
+          id: string
+          is_winner: boolean
+          meld_points: number
+          metadata: Json
+          penalty_points: number
+          position: number
+          remaining_card_ids: string[]
+          result_id: string
+          special_events: string[]
+          total_points: number
+        }
+        Insert: {
+          bonus_points?: number
+          created_at?: string | null
+          displayed_meld_ids?: string[]
+          gamer_id: string
+          hand_points?: number
+          id?: string
+          is_winner?: boolean
+          meld_points?: number
+          metadata?: Json
+          penalty_points?: number
+          position: number
+          remaining_card_ids?: string[]
+          result_id: string
+          special_events?: string[]
+          total_points: number
+        }
+        Update: {
+          bonus_points?: number
+          created_at?: string | null
+          displayed_meld_ids?: string[]
+          gamer_id?: string
+          hand_points?: number
+          id?: string
+          is_winner?: boolean
+          meld_points?: number
+          metadata?: Json
+          penalty_points?: number
+          position?: number
+          remaining_card_ids?: string[]
+          result_id?: string
+          special_events?: string[]
+          total_points?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_result_players_gamer_id_fkey"
+            columns: ["gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_result_players_result_id_fkey"
+            columns: ["result_id"]
+            isOneToOne: false
+            referencedRelation: "game_results"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       game_results: {
         Row: {
           created_at: string | null
           elo_changes: Json | null
-          final_scores: Json
           game_duration_seconds: number
           id: string
           room_id: string
           session_id: string | null
+          summary_metadata: Json | null
           total_moves: number
           total_rounds: number
           winner_gamer_id: string | null
@@ -179,11 +315,11 @@ export type Database = {
         Insert: {
           created_at?: string | null
           elo_changes?: Json | null
-          final_scores: Json
           game_duration_seconds: number
           id?: string
           room_id: string
           session_id?: string | null
+          summary_metadata?: Json | null
           total_moves: number
           total_rounds: number
           winner_gamer_id?: string | null
@@ -192,11 +328,11 @@ export type Database = {
         Update: {
           created_at?: string | null
           elo_changes?: Json | null
-          final_scores?: Json
           game_duration_seconds?: number
           id?: string
           room_id?: string
           session_id?: string | null
+          summary_metadata?: Json | null
           total_moves?: number
           total_rounds?: number
           winner_gamer_id?: string | null
@@ -300,6 +436,64 @@ export type Database = {
           },
         ]
       }
+      game_score_events: {
+        Row: {
+          created_at: string | null
+          event_type: Database["public"]["Enums"]["score_event_type"]
+          gamer_id: string
+          id: string
+          metadata: Json
+          points: number
+          related_card_ids: string[]
+          related_meld_id: string | null
+          session_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          event_type: Database["public"]["Enums"]["score_event_type"]
+          gamer_id: string
+          id?: string
+          metadata?: Json
+          points: number
+          related_card_ids?: string[]
+          related_meld_id?: string | null
+          session_id: string
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: Database["public"]["Enums"]["score_event_type"]
+          gamer_id?: string
+          id?: string
+          metadata?: Json
+          points?: number
+          related_card_ids?: string[]
+          related_meld_id?: string | null
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_score_events_gamer_id_fkey"
+            columns: ["gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_score_events_related_meld_id_fkey"
+            columns: ["related_meld_id"]
+            isOneToOne: false
+            referencedRelation: "game_melds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_score_events_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       game_sessions: {
         Row: {
           current_turn_gamer_id: string | null
@@ -308,6 +502,7 @@ export type Database = {
           finished_at: string | null
           game_state: Json | null
           id: string
+          initial_discard_card_id: string | null
           is_active: boolean
           remaining_deck_cards: number
           room_id: string
@@ -323,6 +518,7 @@ export type Database = {
           finished_at?: string | null
           game_state?: Json | null
           id?: string
+          initial_discard_card_id?: string | null
           is_active?: boolean
           remaining_deck_cards?: number
           room_id: string
@@ -338,6 +534,7 @@ export type Database = {
           finished_at?: string | null
           game_state?: Json | null
           id?: string
+          initial_discard_card_id?: string | null
           is_active?: boolean
           remaining_deck_cards?: number
           room_id?: string
@@ -778,14 +975,13 @@ export type Database = {
         }
         Returns: string
       }
-      finish_dummy_round_if_applicable: {
+      fetch_latest_game_result: {
         Args: {
-          p_session_id: string
+          p_room_id: string
           p_gamer_id: string
-          p_trigger_move: Database["public"]["Enums"]["game_move_type"]
           p_guest_identifier?: string
         }
-        Returns: string
+        Returns: Json
       }
       finish_game_round: {
         Args: {
@@ -871,6 +1067,14 @@ export type Database = {
         Args: { p_rank: Database["public"]["Enums"]["card_rank"] }
         Returns: number
       }
+      get_game_result_summary: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_guest_identifier?: string
+        }
+        Returns: Json
+      }
       get_game_state: {
         Args: {
           p_session_id: string
@@ -878,6 +1082,18 @@ export type Database = {
           p_guest_identifier?: string
         }
         Returns: Json
+      }
+      get_latest_game_result_for_room: {
+        Args: {
+          p_room_id: string
+          p_gamer_id: string
+          p_guest_identifier?: string
+        }
+        Returns: {
+          result_id: string
+          session_id: string
+          created_at: string
+        }[]
       }
       get_latest_room_for_gamer: {
         Args: { p_gamer_id: string; p_guest_identifier?: string }
@@ -1045,9 +1261,25 @@ export type Database = {
         | "knock"
         | "gin"
         | "dummy_finish"
+      meld_type: "set" | "run"
       player_status: "waiting" | "ready" | "playing" | "disconnected" | "left"
       profile_role: "user" | "moderator" | "admin"
       room_status: "waiting" | "ready" | "playing" | "finished" | "cancelled"
+      score_event_type:
+        | "meld_points"
+        | "hand_penalty"
+        | "head_bonus"
+        | "spe_to_meld_bonus"
+        | "spe_to_deposit_bonus"
+        | "knock_bonus"
+        | "dark_knock_bonus"
+        | "color_knock_bonus"
+        | "dark_color_knock_bonus"
+        | "dummy_penalty"
+        | "head_penalty"
+        | "full_penalty"
+        | "spe_to_penalty"
+        | "foolish_penalty"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1190,9 +1422,26 @@ export const Constants = {
         "gin",
         "dummy_finish",
       ],
+      meld_type: ["set", "run"],
       player_status: ["waiting", "ready", "playing", "disconnected", "left"],
       profile_role: ["user", "moderator", "admin"],
       room_status: ["waiting", "ready", "playing", "finished", "cancelled"],
+      score_event_type: [
+        "meld_points",
+        "hand_penalty",
+        "head_bonus",
+        "spe_to_meld_bonus",
+        "spe_to_deposit_bonus",
+        "knock_bonus",
+        "dark_knock_bonus",
+        "color_knock_bonus",
+        "dark_color_knock_bonus",
+        "dummy_penalty",
+        "head_penalty",
+        "full_penalty",
+        "spe_to_penalty",
+        "foolish_penalty",
+      ],
     },
   },
 } as const
