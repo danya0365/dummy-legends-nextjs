@@ -10,6 +10,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { CardBack, PlayingCard } from "../PlayingCard";
+import { DiscardStack } from "./DiscardStack";
 import { GamePlayLayoutProps } from "./types";
 
 export function GamePlaySimpleView({
@@ -21,10 +22,11 @@ export function GamePlaySimpleView({
   myMelds,
   tableMelds,
   communityMelds,
-  discardTop,
+  discardStack,
   isMyTurn,
-  hasDrawn,
+  hasDrawn: _hasDrawn,
   selectedCardId,
+  selectedDiscardCardId,
   remainingSeconds,
   formattedRemaining,
   timerPercentage,
@@ -36,6 +38,10 @@ export function GamePlaySimpleView({
   winningTypeLabel,
   pendingMeldCardIds,
   pendingMeldSet,
+  discardSelectionCount,
+  totalMeldSelectionCount,
+  remainingCardsNeededForMeld,
+  requiredHandCardsForSelectedDiscard,
   canConfirmMeld,
   pendingLayoffCardIds,
   pendingLayoffSet,
@@ -46,9 +52,14 @@ export function GamePlaySimpleView({
   isLoading,
   error,
   currentTurnPlayerName,
+  turnActionMode,
+  actionAvailability,
+  turnActionAllowedActions: _turnActionAllowedActions,
+  turnActionContext: _turnActionContext,
   onBack,
   onDrawFromDeck,
   onDrawFromDiscard,
+  onSelectDiscardCard,
   onSelectCard,
   onToggleMeldCard,
   onStartMeldSelection,
@@ -62,8 +73,28 @@ export function GamePlaySimpleView({
   onDiscard,
   onRefresh,
 }: GamePlayLayoutProps) {
+  void _hasDrawn;
+  void _turnActionAllowedActions;
+  void _turnActionContext;
   const availableLayoffTargets = myMelds.length + tableMelds.length;
   const opponentMeldCount = communityMelds.length;
+  const isAwaitingDrawPhase = turnActionMode === "awaiting_draw";
+  const isDiscardMeldFlow =
+    turnActionMode === "selecting_discard_meld" ||
+    turnActionMode === "assembling_discard_meld";
+  const isDiscardAssistActive = discardSelectionCount > 0 || isDiscardMeldFlow;
+  const shouldDisableMeldMode =
+    !actionAvailability.canStartMeldSelection ||
+    isLoading ||
+    (isAwaitingDrawPhase && !isDiscardAssistActive);
+  const shouldDisableLayoffMode =
+    !actionAvailability.canStartLayoffSelection ||
+    availableLayoffTargets === 0 ||
+    isLoading ||
+    (isAwaitingDrawPhase && !isDiscardAssistActive) ||
+    isDiscardMeldFlow ||
+    isSelectingMeld;
+  const totalSelectedForMeld = Math.max(3, totalMeldSelectionCount);
 
   const handleLayoffTargetClick = (meldId: string) => {
     const nextTarget = selectedLayoffMeldId === meldId ? null : meldId;
@@ -234,13 +265,13 @@ export function GamePlaySimpleView({
                 </p>
                 <button
                   onClick={onDrawFromDeck}
-                  disabled={hasDrawn || !isMyTurn || isLoading}
+                  disabled={!actionAvailability.canDrawFromDeck || isLoading}
                   className={`
                     transition-transform
                     ${
-                      hasDrawn || !isMyTurn
-                        ? "opacity-50 cursor-not-allowed"
-                        : "hover:scale-110 cursor-pointer"
+                      actionAvailability.canDrawFromDeck && !isLoading
+                        ? "hover:scale-110 cursor-pointer"
+                        : "opacity-50 cursor-not-allowed"
                     }
                   `}
                 >
@@ -253,52 +284,43 @@ export function GamePlaySimpleView({
                 <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
                   กองทิ้ง
                 </p>
-                {discardTop ? (
-                  <button
-                    onClick={onDrawFromDiscard}
-                    disabled={hasDrawn || !isMyTurn || isLoading}
-                    className={`
-                      transition-transform
-                      ${
-                        hasDrawn || !isMyTurn
-                          ? "opacity-50 cursor-not-allowed"
-                          : "hover:scale-110 cursor-pointer"
-                      }
-                    `}
-                  >
-                    <PlayingCard card={discardTop} size="large" />
-                  </button>
-                ) : (
-                  <div className="w-24 h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-                    <p className="text-xs text-gray-400">ว่าง</p>
+                <DiscardStack
+                  stack={discardStack}
+                  selectedCardId={selectedDiscardCardId}
+                  onSelectCard={onSelectDiscardCard}
+                  onDrawFromDiscard={onDrawFromDiscard}
+                  drawButtonLabel="เก็บกองทิ้ง"
+                  drawButtonDisabled={
+                    !actionAvailability.canDrawFromDiscard ||
+                    isLoading ||
+                    !selectedDiscardCardId
+                  }
+                  disableSelection={!actionAvailability.canSelectDiscardCard || isLoading}
+                  cardSize="medium"
+                />
+                {isDiscardAssistActive && (
+                  <div className="mt-2 space-y-1 text-xs text-blue-700 dark:text-blue-300">
+                    <p>เลือกจากกองทิ้ง {discardSelectionCount} ใบแล้ว</p>
+                    {remainingCardsNeededForMeld > 0 ? (
+                      <p>
+                        ต้องเลือกไพ่ในมืออีก {Math.max(remainingCardsNeededForMeld, requiredHandCardsForSelectedDiscard)} ใบ
+                        (เลือกแล้ว {pendingMeldCardIds.length}) เพื่อให้ครบอย่างน้อย {totalSelectedForMeld} ใบ
+                      </p>
+                    ) : (
+                      <p>ครบขั้นต่ำสำหรับเกิดแล้ว กด &quot;เกิดไพ่&quot; เพื่อยืนยันได้เลย</p>
+                    )}
+                    {isDiscardMeldFlow && !isSelectingMeld && (
+                      <p className="text-indigo-600 dark:text-indigo-300">
+                        กดปุ่ม &quot;โหมดเกิดไพ่&quot; เพื่อเลือกไพ่ในมือรวมกับกองทิ้ง
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Turn Instructions */}
-            <div className="mt-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-              <p className="text-sm text-center text-blue-900 dark:text-blue-300">
-                {!isMyTurn && "รอเทิร์นของคุณ"}
-                {isMyTurn && !hasDrawn && "🎯 จั่วไพ่จากกอง"}
-                {isMyTurn &&
-                  hasDrawn &&
-                  selectedCardId &&
-                  "✅ คลิกทิ้งไพ่เพื่อจบเทิร์น"}
-                {isMyTurn &&
-                  hasDrawn &&
-                  !selectedCardId &&
-                  "👆 เลือกไพ่ที่จะทิ้ง"}
-              </p>
-            </div>
-          </div>
-
-          {/* Right: Stats */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              สถิติ
-            </h3>
-            <div className="space-y-3">
+            {/* Stats */}
+            <div className="mt-4 space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600 dark:text-gray-400">
                   ไพ่ในมือ:
@@ -364,12 +386,20 @@ export function GamePlaySimpleView({
               ) : (
                 <button
                   onClick={onStartMeldSelection}
-                  className="px-4 py-2 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-200 rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors flex items-center gap-2"
-                  disabled={!isMyTurn}
+                  className="px-4 py-2 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-200 rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={
+                    shouldDisableMeldMode
+                  }
                 >
                   <Sparkles className="h-4 w-4" />
-                  โหมดเกิดไพ่
+                  {isDiscardMeldFlow ? "เลือกไพ่ในมือ" : "โหมดเกิดไพ่"}
                 </button>
+              )}
+
+              {isDiscardMeldFlow && !isSelectingMeld && (
+                <p className="text-xs text-indigo-600 dark:text-indigo-300">
+                  ต้องเลือกไพ่ในมือ {Math.max(requiredHandCardsForSelectedDiscard, 1)} ใบเพื่อผสมกับกองทิ้ง
+                </p>
               )}
 
               {isSelectingLayoff ? (
@@ -393,8 +423,10 @@ export function GamePlaySimpleView({
               ) : (
                 <button
                   onClick={onStartLayoffSelection}
-                  className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-200 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors flex items-center gap-2"
-                  disabled={!isMyTurn || availableLayoffTargets === 0}
+                  className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-200 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={
+                    shouldDisableLayoffMode
+                  }
                 >
                   <HandCoins className="h-4 w-4" />
                   โหมดฝากไพ่
@@ -403,9 +435,7 @@ export function GamePlaySimpleView({
 
               <button
                 onClick={onDiscard}
-                disabled={
-                  !isMyTurn || !hasDrawn || !selectedCardId || isLoading
-                }
+                disabled={!actionAvailability.canDiscardCard || !selectedCardId || isLoading}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {selectedCardId ? "ทิ้งไพ่ใบนี้" : "เลือกไพ่เพื่อทิ้ง"}
@@ -433,7 +463,8 @@ export function GamePlaySimpleView({
                     : card.id === selectedCardId
                 }
                 disabled={
-                  !isMyTurn || (!isSelectingMeld && !isSelectingLayoff && !hasDrawn)
+                  !actionAvailability.canSelectHandCard &&
+                  !(isSelectingMeld || isSelectingLayoff)
                 }
               />
             ))}

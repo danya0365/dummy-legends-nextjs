@@ -36,6 +36,58 @@ export interface GameSession {
   finishedAt: string | null;
 }
 
+export interface DiscardStackEntry {
+  card: GameCard;
+  canSelect: boolean;
+}
+
+export interface DiscardStackInfo {
+  entries: DiscardStackEntry[];
+  selectedCardId: string | null;
+}
+
+export type TurnActionPermission =
+  | "draw_from_deck"
+  | "draw_from_discard"
+  | "select_discard_card"
+  | "select_hand_card"
+  | "toggle_meld_card"
+  | "confirm_meld"
+  | "cancel_selection"
+  | "start_meld_selection"
+  | "start_layoff_selection"
+  | "toggle_layoff_card"
+  | "confirm_layoff"
+  | "discard_card";
+
+export type TurnActionMode =
+  | "idle"
+  | "awaiting_draw"
+  | "selecting_discard"
+  | "selecting_discard_meld"
+  | "assembling_discard_meld"
+  | "selecting_meld"
+  | "selecting_layoff"
+  | "awaiting_discard";
+
+export interface TurnActionContext {
+  discardSelectionCount?: number;
+  requiredHandCardsForSelectedDiscard?: number;
+  remainingHandCardsNeeded?: number;
+  totalMeldSelectionCount?: number;
+  remainingCardsNeededForMeld?: number;
+  returnMode?: TurnActionMode;
+  allowDrawFromDiscard?: boolean;
+  isDiscardMeld?: boolean;
+  minimumHandCardsRequiredForMeld?: number;
+}
+
+export interface TurnActionState {
+  mode: TurnActionMode;
+  allowedActions: TurnActionPermission[];
+  context: TurnActionContext;
+}
+
 export interface PlayerHand {
   gamerId: string;
   cardCount: number;
@@ -145,6 +197,17 @@ export interface GameState {
   mustDiscard: boolean;
 }
 
+export interface GameStateViewModel {
+  session: GameSession | null;
+  myHand: GameCard[];
+  discardTop: GameCard | null;
+  discardStack: DiscardStackInfo | null;
+  otherPlayers: OtherPlayer[];
+  isMyTurn: boolean;
+  canDraw: boolean;
+  mustDiscard: boolean;
+}
+
 export type GameSessionRow = Database["public"]["Tables"]["game_sessions"]["Row"];
 export type GameCardRow = Database["public"]["Tables"]["game_cards"]["Row"];
 export type GameResultRow = Database["public"]["Tables"]["game_results"]["Row"];
@@ -164,6 +227,7 @@ export interface GameStatePayload {
   session: GameSessionRow | null;
   my_hand: GameCardRow[] | null;
   discard_top: GameCardRow | null;
+  discard_stack?: GameCardRow[] | null;
   other_players: GameStateOtherPlayerSummary[] | null;
   my_melds?: Array<{
     meld_id: string;

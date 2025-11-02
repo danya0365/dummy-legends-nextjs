@@ -972,6 +972,7 @@ export type Database = {
           p_gamer_id: string
           p_meld_cards: string[]
           p_guest_identifier?: string
+          p_selected_discard_card_id?: string
         }
         Returns: string
       }

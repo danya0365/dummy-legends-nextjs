@@ -14,6 +14,7 @@ import {
   LayoutList,
 } from "lucide-react";
 import { PlayingCard, CardBack } from "../PlayingCard";
+import { DiscardStack } from "./DiscardStack";
 import type { GameCard } from "@/src/domain/types/gameplay.types";
 import type { GamePlayLayoutProps } from "./types";
 import { computeCircularPositions } from "./utils";
@@ -35,10 +36,11 @@ export function GamePlayLandscape({
   myMelds,
   tableMelds,
   communityMelds,
-  discardTop,
+  discardStack,
   isMyTurn,
-  hasDrawn,
+  hasDrawn: _hasDrawn,
   selectedCardId,
+  selectedDiscardCardId,
   remainingSeconds,
   formattedRemaining,
   timerPercentage,
@@ -60,9 +62,12 @@ export function GamePlayLandscape({
   isLoading,
   error,
   currentTurnPlayerName,
+  turnActionMode,
+  actionAvailability,
   onBack,
   onDrawFromDeck,
   onDrawFromDiscard,
+  onSelectDiscardCard,
   onSelectCard,
   onToggleMeldCard,
   onStartMeldSelection,
@@ -76,6 +81,7 @@ export function GamePlayLandscape({
   onDiscard,
   onRefresh,
 }: GamePlayLayoutProps) {
+  void _hasDrawn;
   const arenaRef = useRef<HTMLDivElement | null>(null);
   const [arenaSize, setArenaSize] = useState({ width: 1600, height: 900 });
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
@@ -348,9 +354,11 @@ export function GamePlayLandscape({
                 <button
                   type="button"
                   onClick={onDrawFromDeck}
-                  disabled={hasDrawn || !isMyTurn || isLoading}
-                  className={`flex flex-col items-center gap-2 rounded-2xl border-2 border-white/70 bg-white/80 px-4 py-3 text-sm font-semibold text-blue-600 shadow transition hover:bg-white dark:border-slate-700 dark:bg-slate-800/80 dark:text-blue-300 ${
-                    hasDrawn || !isMyTurn ? "opacity-50" : ""
+                  disabled={!actionAvailability.canDrawFromDeck || isLoading}
+                  className={`flex flex-col items-center gap-2 rounded-2xl border-2 px-4 py-3 text-sm font-semibold shadow transition ${
+                    actionAvailability.canDrawFromDeck && !isLoading
+                      ? "border-white/70 bg-white/80 text-blue-600 hover:bg-white dark:border-slate-700 dark:bg-slate-800/80 dark:text-blue-300"
+                      : "border-white/40 bg-white/60 text-blue-300/70 cursor-not-allowed dark:border-slate-700/40 dark:bg-slate-800/60"
                   }`}
                 >
                   <CardBack size="large" />
@@ -375,27 +383,45 @@ export function GamePlayLandscape({
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={onDrawFromDiscard}
-                  disabled={hasDrawn || !isMyTurn || isLoading || !discardTop}
-                  className={`flex flex-col items-center gap-2 rounded-2xl border-2 border-white/70 bg-white/80 px-4 py-3 text-sm font-semibold text-purple-600 shadow transition hover:bg-white dark:border-slate-700 dark:bg-slate-800/80 dark:text-purple-300 ${
-                    hasDrawn || !isMyTurn || !discardTop ? "opacity-50" : ""
-                  }`}
-                >
-                  {discardTop ? (
-                    <PlayingCard card={discardTop} size="large" />
-                  ) : (
-                    <CardBack size="large" />
-                  )}
-                  <span>เก็บกองทิ้ง</span>
-                </button>
+                <DiscardStack
+                  stack={discardStack}
+                  selectedCardId={selectedDiscardCardId}
+                  onSelectCard={onSelectDiscardCard}
+                  onDrawFromDiscard={onDrawFromDiscard}
+                  drawButtonLabel="เก็บกองทิ้ง"
+                  drawButtonDisabled={
+                    !actionAvailability.canDrawFromDiscard ||
+                    isLoading ||
+                    !selectedDiscardCardId
+                  }
+                  disableSelection={!actionAvailability.canSelectDiscardCard || isLoading}
+                  cardSize="large"
+                />
               </div>
 
               <div className="min-h-[32px] text-center text-sm text-blue-900 dark:text-blue-200">
                 {guidanceMessage ||
                   (isMyTurn
-                    ? "เลือกการกระทำในเทิร์นของคุณ"
+                    ? (() => {
+                        switch (turnActionMode) {
+                          case "awaiting_draw":
+                            return "เลือกการกระทำในเทิร์นของคุณ - จั่วหรือเก็บกองทิ้ง";
+                          case "selecting_discard":
+                            return "รวมไพ่จากกองทิ้งกับไพ่ในมือให้ครบ";
+                          case "selecting_meld":
+                            return "เลือกไพ่เพื่อเตรียมเกิด";
+                          case "selecting_layoff":
+                            return "เลือกกองเกิดและไพ่ที่จะฝาก";
+                          case "awaiting_discard":
+                            return selectedCardId
+                              ? "กดทิ้งไพ่เพื่อจบเทิร์น"
+                              : actionAvailability.canDiscardCard
+                              ? "เลือกไพ่ที่จะทิ้ง"
+                              : "รอคำสั่งที่อนุญาตให้ทิ้งไพ่";
+                          default:
+                            return "เลือกการกระทำในเทิร์นของคุณ";
+                        }
+                      })()
                     : "รอผู้เล่นคนอื่นจัดการเทิร์น")}
               </div>
             </div>
@@ -426,7 +452,7 @@ export function GamePlayLandscape({
                   <button
                     type="button"
                     onClick={onStartMeldSelection}
-                    disabled={!isMyTurn}
+                    disabled={!actionAvailability.canStartMeldSelection || isLoading}
                     className="flex items-center gap-2 rounded-full bg-emerald-100 px-6 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-500/20 dark:text-emerald-200 dark:hover:bg-emerald-500/30"
                   >
                     <Sparkles className="h-4 w-4" />
@@ -458,7 +484,11 @@ export function GamePlayLandscape({
                   <button
                     type="button"
                     onClick={onStartLayoffSelection}
-                    disabled={!isMyTurn || isLayoffDisabled}
+                    disabled={
+                      !actionAvailability.canStartLayoffSelection ||
+                      availableLayoffTargets === 0 ||
+                      isLoading
+                    }
                     className="flex items-center gap-2 rounded-full bg-indigo-100 px-6 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-200 disabled:opacity-50 dark:bg-indigo-500/20 dark:text-indigo-200 dark:hover:bg-indigo-500/30"
                   >
                     <HandCoins className="h-4 w-4" />
@@ -469,21 +499,18 @@ export function GamePlayLandscape({
                 <button
                   type="button"
                   onClick={onDiscard}
-                  disabled={
-                    !isMyTurn || !hasDrawn || !selectedCardId || isLoading
-                  }
-                  className="rounded-full bg-blue-600 px-7 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!actionAvailability.canDiscardCard || !selectedCardId || isLoading}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {selectedCardId ? "ทิ้งไพ่ใบนี้" : "เลือกไพ่เพื่อทิ้ง"}
                 </button>
               </div>
 
-              <div className="flex flex-wrap justify-center gap-2">
+              <div className="flex flex-wrap gap-2 justify-center">
                 {myHand.map((card) => (
                   <PlayingCard
                     key={card.id}
                     card={card}
-                    size="medium"
                     onClick={() =>
                       isSelectingMeld
                         ? onToggleMeldCard(card.id)
@@ -499,7 +526,9 @@ export function GamePlayLandscape({
                         : card.id === selectedCardId
                     }
                     disabled={
-                      !isMyTurn || (!isSelectingMeld && !isSelectingLayoff && !hasDrawn)
+                      (!actionAvailability.canSelectHandCard &&
+                        !isSelectingMeld &&
+                        !isSelectingLayoff)
                     }
                   />
                 ))}

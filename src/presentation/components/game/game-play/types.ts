@@ -4,6 +4,10 @@ import type {
   TableMeld,
   GameSession,
   OtherPlayer,
+  DiscardStackInfo,
+  TurnActionMode,
+  TurnActionPermission,
+  TurnActionContext,
 } from "@/src/domain/types/gameplay.types";
 import type { GameRoom } from "@/src/domain/types/game.types";
 
@@ -28,9 +32,11 @@ export interface GamePlayLayoutProps {
   tableMelds: TableMeld[];
   communityMelds: TableMeld[];
   discardTop: GameCard | null;
+  discardStack: DiscardStackInfo | null;
   isMyTurn: boolean;
   hasDrawn: boolean;
   selectedCardId: string | null;
+  selectedDiscardCardId: string | null;
   remainingSeconds: number;
   formattedRemaining: string;
   timerPercentage: number;
@@ -42,7 +48,13 @@ export interface GamePlayLayoutProps {
   winningTypeLabel: string | null;
   pendingMeldCardIds: string[];
   pendingMeldSet: Set<string>;
+  discardSelectionCount: number;
+  totalMeldSelectionCount: number;
+  remainingCardsNeededForMeld: number;
+  requiredHandCardsForSelectedDiscard: number;
+  remainingHandCardsNeeded: number;
   canConfirmMeld: boolean;
+  isDiscardMeldFlow: boolean;
   isSelectingMeld: boolean;
   pendingLayoffCardIds: string[];
   pendingLayoffSet: Set<string>;
@@ -52,9 +64,27 @@ export interface GamePlayLayoutProps {
   isLoading: boolean;
   error: string | null;
   currentTurnPlayerName: string;
+  turnActionMode: TurnActionMode;
+  turnActionAllowedActions: TurnActionPermission[];
+  turnActionContext: TurnActionContext;
+  actionAvailability: {
+    canDrawFromDeck: boolean;
+    canDrawFromDiscard: boolean;
+    canSelectDiscardCard: boolean;
+    canSelectHandCard: boolean;
+    canStartMeldSelection: boolean;
+    canCancelSelection: boolean;
+    canToggleMeldCard: boolean;
+    canConfirmMeldAction: boolean;
+    canStartLayoffSelection: boolean;
+    canToggleLayoffCard: boolean;
+    canConfirmLayoffAction: boolean;
+    canDiscardCard: boolean;
+  };
   onBack: () => void;
   onDrawFromDeck: () => void;
   onDrawFromDiscard: () => void;
+  onSelectDiscardCard: (cardId: string) => void;
   onSelectCard: (cardId: string) => void;
   onToggleMeldCard: (cardId: string) => void;
   onStartMeldSelection: () => void;

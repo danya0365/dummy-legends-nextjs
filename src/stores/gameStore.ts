@@ -11,8 +11,17 @@ import type {
   RoomStatus,
 } from "@/src/domain/types/game.types";
 import type {
+  DiscardStackInfo,
   GameCard,
   GameCardRow,
+  GameMeldRow,
+  GameResultMeld,
+  GameResultPlayerRow,
+  GameResultPlayerSummary,
+  GameResultRow,
+  GameResultSummary,
+  GameScoreEventEntry,
+  GameScoreEventRow,
   GameSession,
   GameSessionRow,
   GameStateOtherPlayerSummary,
@@ -20,14 +29,10 @@ import type {
   OtherPlayer,
   PlayerMeld,
   TableMeld,
-  GameResultSummary,
-  GameResultPlayerSummary,
-  GameResultMeld,
-  GameScoreEventEntry,
-  GameResultRow,
-  GameResultPlayerRow,
-  GameScoreEventRow,
-  GameMeldRow,
+  TurnActionContext,
+  TurnActionMode,
+  TurnActionPermission,
+  TurnActionState,
   DeadwoodCardDetail,
 } from "@/src/domain/types/gameplay.types";
 import type { Json } from "@/src/domain/types/supabase";
@@ -279,11 +284,15 @@ interface GameStore extends RoomState {
   myMelds: PlayerMeld[];
   tableMelds: TableMeld[];
   discardTop: GameCard | null;
+  discardStack: DiscardStackInfo | null;
   otherPlayers: OtherPlayer[];
   gameChannel: RealtimeChannel | null;
   isSelectingLayoff: boolean;
   targetMeldId: string | null;
   pendingLayoffCardIds: string[];
+  selectedDiscardCardId: string | null;
+  hasDrawnThisTurn: boolean;
+  turnActionState: TurnActionState;
 
   // Game result summary
   gameResultSummary: GameResultSummary | null;
@@ -326,8 +335,17 @@ interface GameStore extends RoomState {
   loadGameState: (sessionId: string) => Promise<void>;
   drawCard: (
     fromDeck: boolean,
-    options?: { meldCards?: string[] }
+    options?: { meldCards?: string[]; selectedDiscardCardId?: string }
   ) => Promise<void>;
+  selectDiscardCard: (cardId: string | null) => void;
+  setTurnActionContext: (context: Partial<TurnActionContext>) => void;
+  setTurnActionMode: (
+    mode: TurnActionMode,
+    options?: {
+      allowedActions?: TurnActionPermission[];
+      context?: Partial<TurnActionContext>;
+    }
+  ) => void;
   createMeld: (cardIds?: string[]) => Promise<string>;
   startMeldSelection: () => void;
   cancelMeldSelection: () => void;
@@ -386,11 +404,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
   myMelds: [],
   tableMelds: [],
   discardTop: null,
+  discardStack: null,
   otherPlayers: [],
   gameChannel: null,
   isSelectingLayoff: false,
   targetMeldId: null,
   pendingLayoffCardIds: [],
+  selectedDiscardCardId: null,
+  hasDrawnThisTurn: false,
+  turnActionState: {
+    mode: "idle",
+    allowedActions: [],
+    context: {},
+  },
 
   // Initial State - Game result summary
   gameResultSummary: null,
@@ -702,6 +728,113 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
       throw error;
     }
+  },
+
+  selectDiscardCard: (cardId: string | null) => {
+    set((state) => {
+      const discardEntries = state.discardStack?.entries ?? [];
+      const selectedEntry = cardId
+        ? discardEntries.find((entry) => entry.card.id === cardId)
+        : null;
+
+      const discardSelectionCount =
+        cardId && selectedEntry
+          ? discardEntries.filter(
+              (entry) => entry.card.position <= selectedEntry.card.position
+            ).length
+          : 0;
+
+      const allowDrawFromDiscard = discardEntries.length > 0;
+      const requiredHandCardsForSelectedDiscard = Math.max(
+        0,
+        3 - discardSelectionCount
+      );
+      const nextContext: TurnActionContext = {
+        ...state.turnActionState.context,
+        allowDrawFromDiscard,
+        discardSelectionCount,
+        requiredHandCardsForSelectedDiscard,
+        remainingHandCardsNeeded: requiredHandCardsForSelectedDiscard,
+        totalMeldSelectionCount: discardSelectionCount,
+        remainingCardsNeededForMeld: Math.max(
+          0,
+          3 - discardSelectionCount
+        ),
+        isDiscardMeld: Boolean(cardId),
+      };
+
+      if (!cardId) {
+        const mode: TurnActionMode = state.hasDrawnThisTurn
+          ? "awaiting_discard"
+          : "awaiting_draw";
+        const allowedActions: TurnActionPermission[] = state.hasDrawnThisTurn
+          ? [
+              "select_hand_card",
+              "discard_card",
+              "start_meld_selection",
+              "start_layoff_selection",
+            ]
+          : [
+              "draw_from_deck",
+              "draw_from_discard",
+              "select_discard_card",
+              "start_meld_selection",
+            ];
+
+        return {
+          selectedDiscardCardId: null,
+          pendingMeldCardIds: [],
+          isSelectingMeld: false,
+          turnActionState: {
+            mode,
+            allowedActions,
+            context: {
+              ...nextContext,
+              isDiscardMeld: false,
+              discardSelectionCount: 0,
+              requiredHandCardsForSelectedDiscard: 3,
+              remainingHandCardsNeeded: 3,
+              totalMeldSelectionCount: 0,
+              remainingCardsNeededForMeld: 3,
+            },
+          },
+        };
+      }
+
+      return {
+        selectedDiscardCardId: cardId,
+        pendingMeldCardIds: [],
+        isSelectingMeld: false,
+        turnActionState: {
+          mode: "selecting_discard_meld",
+          allowedActions: [
+            "select_discard_card",
+            "start_meld_selection",
+            "cancel_selection",
+          ],
+          context: nextContext,
+        },
+      };
+    });
+  },
+
+  setTurnActionContext: (context) => {
+    set((state) => ({
+      turnActionState: {
+        ...state.turnActionState,
+        context: { ...state.turnActionState.context, ...context },
+      },
+    }));
+  },
+
+  setTurnActionMode: (mode, options) => {
+    set((state) => ({
+      turnActionState: {
+        mode,
+        allowedActions: options?.allowedActions ?? state.turnActionState.allowedActions,
+        context: { ...state.turnActionState.context, ...(options?.context ?? {}) },
+      },
+    }));
   },
 
   /**
@@ -1591,9 +1724,55 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const discardTop = payload.discard_top
         ? mapGameCardRow(payload.discard_top)
         : null;
+      const discardStackCards = (payload.discard_stack ?? []).map(
+        mapGameCardRow
+      );
       const otherPlayers = (payload.other_players ?? []).map(
         mapOtherPlayerSummary
       );
+
+      const prevState = get();
+      const prevSelectedDiscardId = prevState.selectedDiscardCardId;
+      const discardStack: DiscardStackInfo | null =
+        discardStackCards.length > 0
+          ? {
+              entries: discardStackCards.map((card) => ({
+                card,
+                canSelect: true,
+              })),
+              selectedCardId: prevSelectedDiscardId &&
+                discardStackCards.some((card) => card.id === prevSelectedDiscardId)
+                ? prevSelectedDiscardId
+                : null,
+            }
+          : null;
+
+      const isMyTurn = session?.currentTurnGamerId === gamerId;
+      const hasDrawn = prevState.hasDrawnThisTurn && isMyTurn;
+
+      const nextTurnState: TurnActionState = !isMyTurn
+        ? { mode: "idle", allowedActions: [], context: {} }
+        : hasDrawn
+        ? {
+            mode: "awaiting_discard",
+            allowedActions: [
+              "select_hand_card",
+              "discard_card",
+              "start_meld_selection",
+              "start_layoff_selection",
+            ],
+            context: {},
+          }
+        : {
+            mode: "awaiting_draw",
+            allowedActions: [
+              "draw_from_deck",
+              "draw_from_discard",
+              "select_discard_card",
+              "start_meld_selection",
+            ],
+            context: { allowDrawFromDiscard: discardStackCards.length > 0 },
+          };
 
       set({
         currentSession: session,
@@ -1601,12 +1780,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         myMelds,
         tableMelds,
         discardTop,
+        discardStack,
         otherPlayers,
         pendingMeldCardIds: [],
         isSelectingMeld: false,
         pendingLayoffCardIds: [],
         isSelectingLayoff: false,
         targetMeldId: null,
+        selectedDiscardCardId: discardStack?.selectedCardId ?? null,
+        hasDrawnThisTurn: hasDrawn,
+        turnActionState: nextTurnState,
       });
     } catch (error) {
       console.error("Failed to load game state:", error);
@@ -1615,43 +1798,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
-  /**
-   * Draw a card
-   */
-  drawCard: async (fromDeck: boolean, options?: { meldCards?: string[] }) => {
+  drawCard: async (
+    fromDeck: boolean,
+    options?: { meldCards?: string[]; selectedDiscardCardId?: string }
+  ) => {
     try {
       const { currentSession, gamerId, guestId } = get();
-      if (!currentSession || !gamerId) throw new Error("ไม่พบเซสชันเกม");
-
-      if (fromDeck) {
-        const { error } = await supabase.rpc("draw_card", {
-          p_session_id: currentSession.id,
-          p_gamer_id: gamerId,
-          p_guest_identifier: guestId || undefined,
-        });
-
-        if (error) throw error;
-      } else {
-        const meldCards = options?.meldCards;
-        if (!meldCards || meldCards.length === 0) {
-          throw new Error("ต้องระบุไพ่ที่จะใช้เกิดเมื่อเก็บจากกองทิ้ง");
-        }
-
-        const { error } = await supabase.rpc("draw_discard_and_meld", {
-          p_session_id: currentSession.id,
-          p_gamer_id: gamerId,
-          p_meld_cards: meldCards,
-          p_guest_identifier: guestId || undefined,
-        });
-
-        if (error) throw error;
+      if (!currentSession || !gamerId) {
+        throw new Error("ไม่พบเซสชันเกม");
       }
 
-      // Reload game state
+      const { error } = await supabase.rpc(
+        fromDeck ? "draw_card" : "draw_discard_and_meld",
+        fromDeck
+          ? {
+              p_session_id: currentSession.id,
+              p_gamer_id: gamerId,
+              p_guest_identifier: guestId || undefined,
+            }
+          : {
+              p_session_id: currentSession.id,
+              p_gamer_id: gamerId,
+              p_guest_identifier: guestId || undefined,
+              p_meld_cards: options?.meldCards ?? [],
+              p_selected_discard_card_id:
+                options?.selectedDiscardCardId || undefined,
+            }
+      );
+
+      if (error) throw error;
+
+      set({ hasDrawnThisTurn: true });
+
       await get().loadGameState(currentSession.id);
 
       if (!fromDeck) {
-        set({ pendingMeldCardIds: [], isSelectingMeld: false });
+        set({
+          pendingMeldCardIds: [],
+          isSelectingMeld: false,
+          selectedDiscardCardId: null,
+        });
       }
     } catch (error) {
       console.error("Failed to draw card:", error);
@@ -1686,7 +1872,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (error) throw error;
 
       await get().loadGameState(currentSession.id);
-      set({ pendingMeldCardIds: [], isSelectingMeld: false });
+      set({
+        pendingMeldCardIds: [],
+        isSelectingMeld: false,
+        hasDrawnThisTurn: true,
+        turnActionState: {
+          mode: "awaiting_discard",
+          allowedActions: [
+            "select_hand_card",
+            "discard_card",
+            "start_meld_selection",
+            "start_layoff_selection",
+          ],
+          context: {},
+        },
+      });
       return (data as string) ?? "";
     } catch (error) {
       console.error("Failed to create meld:", error);
@@ -1698,11 +1898,91 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   startMeldSelection: () => {
-    set({ isSelectingMeld: true, pendingMeldCardIds: [] });
+    set((state) => {
+      const discardSelectionCount =
+        state.turnActionState.context.discardSelectionCount ?? 0;
+      const requiredHandCardsForSelectedDiscard = Math.max(
+        0,
+        3 - discardSelectionCount
+      );
+      const isDiscardMeld =
+        Boolean(state.selectedDiscardCardId) ||
+        Boolean(state.turnActionState.context.isDiscardMeld);
+
+      return {
+        isSelectingMeld: true,
+        pendingMeldCardIds: [],
+        turnActionState: {
+          mode: isDiscardMeld
+            ? "assembling_discard_meld"
+            : "selecting_meld",
+          allowedActions: [
+            "toggle_meld_card",
+            "confirm_meld",
+            "cancel_selection",
+          ],
+          context: {
+            ...state.turnActionState.context,
+            discardSelectionCount,
+            requiredHandCardsForSelectedDiscard,
+            remainingHandCardsNeeded: requiredHandCardsForSelectedDiscard,
+            totalMeldSelectionCount: discardSelectionCount,
+            remainingCardsNeededForMeld: Math.max(
+              0,
+              3 - discardSelectionCount
+            ),
+            isDiscardMeld,
+          },
+        },
+      };
+    });
   },
 
   cancelMeldSelection: () => {
-    set({ isSelectingMeld: false, pendingMeldCardIds: [] });
+    set((state) => ({
+      isSelectingMeld: false,
+      pendingMeldCardIds: [],
+      turnActionState: (() => {
+        if (
+          state.turnActionState.context.isDiscardMeld &&
+          state.selectedDiscardCardId
+        ) {
+          return {
+            mode: "selecting_discard_meld" as TurnActionMode,
+            allowedActions: [
+              "select_discard_card",
+              "start_meld_selection",
+              "cancel_selection",
+            ],
+            context: {
+              ...state.turnActionState.context,
+              isDiscardMeld: true,
+            },
+          } satisfies TurnActionState;
+        }
+
+        return {
+          mode: state.hasDrawnThisTurn ? "awaiting_discard" : "awaiting_draw",
+          allowedActions: state.hasDrawnThisTurn
+            ? [
+                "select_hand_card",
+                "discard_card",
+                "start_meld_selection",
+                "start_layoff_selection",
+              ]
+            : [
+                "draw_from_deck",
+                "draw_from_discard",
+                "select_discard_card",
+                "start_meld_selection",
+              ],
+          context: {
+            ...state.turnActionState.context,
+            isDiscardMeld: false,
+          },
+        } satisfies TurnActionState;
+      })(),
+    }));
   },
 
   toggleMeldCard: (cardId: string) => {
@@ -1718,19 +1998,110 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? state.pendingMeldCardIds.filter((id) => id !== cardId)
         : [...state.pendingMeldCardIds, cardId];
 
+      const discardSelectionCount =
+        state.turnActionState.context.discardSelectionCount ?? 0;
+      const totalSelected = discardSelectionCount + pendingMeldCardIds.length;
+      const requiredHandCardsForSelectedDiscard = Math.max(
+        0,
+        3 - discardSelectionCount
+      );
+      const remainingHandCardsNeeded = Math.max(
+        0,
+        requiredHandCardsForSelectedDiscard - pendingMeldCardIds.length
+      );
+      const remainingCardsNeededForMeld = Math.max(0, 3 - totalSelected);
+      const isDiscardMeld = Boolean(state.turnActionState.context.isDiscardMeld);
+      const hasPending = pendingMeldCardIds.length > 0;
+
+      const nextMode: TurnActionMode = isDiscardMeld
+        ? hasPending
+          ? "assembling_discard_meld"
+          : "selecting_discard_meld"
+        : hasPending
+        ? "selecting_meld"
+        : state.hasDrawnThisTurn
+        ? "awaiting_discard"
+        : "awaiting_draw";
+
+      const nextAllowedActions: TurnActionPermission[] = hasPending
+        ? ["toggle_meld_card", "confirm_meld", "cancel_selection"]
+        : isDiscardMeld
+        ? ["select_discard_card", "start_meld_selection", "cancel_selection"]
+        : state.hasDrawnThisTurn
+        ? [
+            "select_hand_card",
+            "discard_card",
+            "start_meld_selection",
+            "start_layoff_selection",
+          ]
+        : [
+            "draw_from_deck",
+            "draw_from_discard",
+            "select_discard_card",
+            "start_meld_selection",
+          ];
+
       return {
         pendingMeldCardIds,
-        isSelectingMeld: pendingMeldCardIds.length > 0,
+        isSelectingMeld: hasPending,
+        turnActionState: {
+          mode: nextMode,
+          allowedActions: nextAllowedActions,
+          context: {
+            ...state.turnActionState.context,
+            discardSelectionCount,
+            requiredHandCardsForSelectedDiscard,
+            remainingHandCardsNeeded,
+            totalMeldSelectionCount: totalSelected,
+            remainingCardsNeededForMeld,
+            isDiscardMeld,
+          },
+        },
       };
     });
   },
 
   startLayoffSelection: () => {
-    set({ isSelectingLayoff: true, pendingLayoffCardIds: [], targetMeldId: null });
+    set((state) => ({
+      isSelectingLayoff: true,
+      pendingLayoffCardIds: [],
+      targetMeldId: null,
+      turnActionState: {
+        mode: "selecting_layoff",
+        allowedActions: [
+          "select_hand_card",
+          "toggle_layoff_card",
+          "confirm_layoff",
+          "cancel_selection",
+        ],
+        context: state.turnActionState.context,
+      },
+    }));
   },
 
   cancelLayoffSelection: () => {
-    set({ isSelectingLayoff: false, pendingLayoffCardIds: [], targetMeldId: null });
+    set((state) => ({
+      isSelectingLayoff: false,
+      pendingLayoffCardIds: [],
+      targetMeldId: null,
+      turnActionState: {
+        mode: state.hasDrawnThisTurn ? "awaiting_discard" : "awaiting_draw",
+        allowedActions: state.hasDrawnThisTurn
+          ? [
+              "select_hand_card",
+              "discard_card",
+              "start_meld_selection",
+              "start_layoff_selection",
+            ]
+          : [
+              "draw_from_deck",
+              "draw_from_discard",
+              "select_discard_card",
+              "start_meld_selection",
+            ],
+        context: state.turnActionState.context,
+      },
+    }));
   },
 
   toggleLayoffCard: (cardId: string) => {
@@ -1743,6 +2114,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return {
         pendingLayoffCardIds,
         isSelectingLayoff: pendingLayoffCardIds.length > 0 || state.targetMeldId !== null,
+        turnActionState: {
+          mode: "selecting_layoff",
+          allowedActions: [
+            "select_hand_card",
+            "toggle_layoff_card",
+            "confirm_layoff",
+            "cancel_selection",
+          ],
+          context: {
+            ...state.turnActionState.context,
+            totalMeldSelectionCount: pendingLayoffCardIds.length,
+          },
+        },
       };
     });
   },
@@ -1751,6 +2135,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((state) => ({
       targetMeldId: meldId,
       isSelectingLayoff: state.pendingLayoffCardIds.length > 0 || !!meldId,
+      turnActionState: {
+        mode: "selecting_layoff",
+        allowedActions: [
+          "select_hand_card",
+          "toggle_layoff_card",
+          "confirm_layoff",
+          "cancel_selection",
+        ],
+        context: state.turnActionState.context,
+      },
     }));
   },
 
@@ -1803,6 +2197,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         pendingLayoffCardIds: [],
         isSelectingLayoff: false,
         targetMeldId: null,
+        hasDrawnThisTurn: true,
       });
     } catch (error) {
       console.error("Failed to layoff cards:", error);
@@ -1832,7 +2227,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // Reload game state
       await get().loadGameState(currentSession.id);
-      set({ pendingMeldCardIds: [], isSelectingMeld: false });
+      set({
+        pendingMeldCardIds: [],
+        isSelectingMeld: false,
+        selectedDiscardCardId: null,
+        hasDrawnThisTurn: false,
+        turnActionState: {
+          mode: "idle",
+          allowedActions: [],
+          context: {},
+        },
+      });
     } catch (error) {
       console.error("Failed to discard card:", error);
       set({

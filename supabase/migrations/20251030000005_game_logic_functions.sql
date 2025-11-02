@@ -1303,11 +1303,12 @@ CREATE OR REPLACE FUNCTION public.draw_discard_and_meld(
   p_session_id UUID,
   p_gamer_id UUID,
   p_meld_cards UUID[],
-  p_guest_identifier TEXT DEFAULT NULL
+  p_guest_identifier TEXT DEFAULT NULL,
+  p_selected_discard_card_id UUID DEFAULT NULL
 )
 RETURNS UUID AS $$
 DECLARE
-  v_discard_card_id UUID;
+  v_selected_discard_card_id UUID;
   v_can_access BOOLEAN;
   v_current_turn UUID;
   v_hand_count INTEGER;
@@ -1319,6 +1320,10 @@ DECLARE
   v_includes_speto BOOLEAN := false;
   v_score_value INTEGER := 0;
   v_speto_card_ids UUID[] := '{}';
+  v_cards_to_collect UUID[] := '{}';
+  v_cards_collected_count INTEGER := 0;
+  v_target_position INTEGER;
+  v_card_to_collect UUID;
 BEGIN
   IF p_meld_cards IS NULL OR array_length(p_meld_cards, 1) < 3 THEN
     RAISE EXCEPTION 'Meld requires at least three cards (including discard)';
@@ -1362,21 +1367,21 @@ BEGIN
   --
   -- Commented out hand count check to allow drawing from discard when hand is full
 
-  -- Ensure discard pile has a top card and matches meld (lock discard state)
-  SELECT discard_pile_top_card_id INTO v_discard_card_id
+  -- Determine which discard card is being selected and lock session row
+  SELECT discard_pile_top_card_id INTO v_selected_discard_card_id
   FROM public.game_sessions
   WHERE id = p_session_id
   FOR UPDATE;
 
-  IF v_discard_card_id IS NULL THEN
+  IF p_selected_discard_card_id IS NOT NULL THEN
+    v_selected_discard_card_id := p_selected_discard_card_id;
+  END IF;
+
+  IF v_selected_discard_card_id IS NULL THEN
     RAISE EXCEPTION 'Discard pile is empty';
   END IF;
 
-  IF NOT (v_discard_card_id = ANY(p_meld_cards)) THEN
-    RAISE EXCEPTION 'Meld must include discard top card';
-  END IF;
-
-  -- Ensure player holds remaining meld cards in hand
+  -- Ensure player holds remaining meld cards in hand and selected discard card is valid
   IF EXISTS (
     SELECT 1
     FROM unnest(p_meld_cards) AS meld_card
@@ -1386,26 +1391,66 @@ BEGIN
       WHERE id = meld_card
         AND session_id = p_session_id
         AND (
-          (id = v_discard_card_id AND location = 'discard')
-          OR (id <> v_discard_card_id AND location = 'hand' AND owner_gamer_id = p_gamer_id)
+          (id = v_selected_discard_card_id AND location = 'discard')
+          OR (id <> v_selected_discard_card_id AND location = 'hand' AND owner_gamer_id = p_gamer_id)
         )
     )
   ) THEN
     RAISE EXCEPTION 'Meld contains cards not accessible to player';
   END IF;
 
-  -- Move discard top card to player's hand
-  UPDATE public.game_cards
-  SET location = 'hand',
-      owner_gamer_id = p_gamer_id,
-      position_in_location = v_hand_count,
-      updated_at = NOW()
-  WHERE id = v_discard_card_id
-    AND session_id = p_session_id;
+  -- Ensure selected discard card is part of meld requirement
+  IF NOT (v_selected_discard_card_id = ANY(p_meld_cards)) THEN
+    RAISE EXCEPTION 'Selected discard card must be included in meld';
+  END IF;
 
-  -- Update hand count after drawing discard card
+  -- Determine all discard cards that must be collected (target card + all on top)
+  SELECT position_in_location
+  INTO v_target_position
+  FROM public.game_cards
+  WHERE id = v_selected_discard_card_id
+    AND session_id = p_session_id
+    AND location = 'discard'
+  FOR UPDATE;
+
+  IF v_target_position IS NULL THEN
+    RAISE EXCEPTION 'Selected discard card is no longer available';
+  END IF;
+
+  SELECT array_agg(id ORDER BY position_in_location)
+  INTO v_cards_to_collect
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND location = 'discard'
+    AND position_in_location <= v_target_position
+  FOR UPDATE;
+
+  v_cards_collected_count := COALESCE(array_length(v_cards_to_collect, 1), 0);
+
+  IF v_cards_collected_count = 0 THEN
+    RAISE EXCEPTION 'No discard cards available to collect';
+  END IF;
+
+  IF NOT (v_selected_discard_card_id = ANY(v_cards_to_collect)) THEN
+    RAISE EXCEPTION 'Selected discard card not in discard stack';
+  END IF;
+
+  -- Move required discard stack to player's hand (preserving order)
+  FOR i IN 1..v_cards_collected_count LOOP
+    v_card_to_collect := v_cards_to_collect[i];
+
+    UPDATE public.game_cards
+    SET location = 'hand',
+        owner_gamer_id = p_gamer_id,
+        position_in_location = v_hand_count + (i - 1),
+        updated_at = NOW()
+    WHERE id = v_card_to_collect
+      AND session_id = p_session_id;
+  END LOOP;
+
+  -- Update hand count after drawing discard stack
   UPDATE public.game_hands
-  SET card_count = card_count + 1,
+  SET card_count = card_count + v_cards_collected_count,
       updated_at = NOW()
   WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
 
@@ -1568,13 +1613,14 @@ BEGIN
     'draw_discard',
     (SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id),
     jsonb_build_object(
-      'card_id', v_discard_card_id,
+      'selected_discard_card_id', v_selected_discard_card_id,
+      'collected_discard_cards', v_cards_to_collect,
       'meld_id', v_meld_id,
       'meld_cards', p_meld_cards
     )
   );
 
-  RETURN v_discard_card_id;
+  RETURN v_selected_discard_card_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -2119,6 +2165,12 @@ BEGIN
       SELECT row_to_json(c)
       FROM public.game_cards c
       WHERE c.id = s.discard_pile_top_card_id
+    ),
+    'discard_stack', (
+      SELECT json_agg(row_to_json(c) ORDER BY c.position_in_location)
+      FROM public.game_cards c
+      WHERE c.session_id = p_session_id
+        AND c.location = 'discard'
     ),
     'my_melds', (
       SELECT json_agg(
