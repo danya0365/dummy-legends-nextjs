@@ -2313,6 +2313,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
    * Subscribe to game session updates
    */
   subscribeToGameSession: async (sessionId: string) => {
+    let reloadTimeout: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReload = () => {
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+
+      reloadTimeout = setTimeout(() => {
+        get().loadGameState(sessionId);
+        reloadTimeout = null;
+      }, 100);
+    };
+
     const channel = supabase
       .channel(`game:${sessionId}`)
       .on(
@@ -2323,10 +2335,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           table: "game_cards",
           filter: `session_id=eq.${sessionId}`,
         },
-        () => {
-          // Reload game state when cards change
-          get().loadGameState(sessionId);
-        }
+        scheduleReload
       )
       .on(
         "postgres_changes",
@@ -2336,10 +2345,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           table: "game_sessions",
           filter: `id=eq.${sessionId}`,
         },
-        () => {
-          // Reload game state when session updates
-          get().loadGameState(sessionId);
-        }
+        scheduleReload
       )
       .subscribe((status) => {
         console.log("Game session subscription response:", status);
