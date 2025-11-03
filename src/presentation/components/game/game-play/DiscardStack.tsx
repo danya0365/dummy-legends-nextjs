@@ -34,19 +34,31 @@ export function DiscardStack({
 }: DiscardStackProps) {
   const cards = useMemo(() => stack?.entries ?? [], [stack?.entries]);
 
-  const { overlapOffset } = useMemo(() => {
+  const { cardSpacing, stackHeight } = useMemo(() => {
     const overlapMap: Record<typeof cardSize, number> = {
       small: 52,
       medium: 48,
       large: 34,
     };
 
+    const cardHeights: Record<typeof cardSize, number> = {
+      small: 80,
+      medium: 112,
+      large: 160,
+    };
+
     const offset = overlapMap[cardSize] ?? 24;
+    const cardHeight = cardHeights[cardSize] ?? 112;
+    const spacing = cardHeight - offset;
+    const height = cards.length
+      ? cardHeight + (cards.length - 1) * spacing
+      : cardHeight;
 
     return {
-      overlapOffset: offset,
+      cardSpacing: spacing,
+      stackHeight: height,
     };
-  }, [cardSize]);
+  }, [cardSize, cards.length]);
 
   const displayCards = useMemo(
     () => cards.map((entry, index) => ({ entry, index })),
@@ -60,6 +72,7 @@ export function DiscardStack({
           "relative flex w-full flex-col items-center", // container for overlapping stack
           listClassName
         )}
+        style={cards.length ? { height: stackHeight } : undefined}
       >
         {cards.length === 0 ? (
           <div className="flex h-32 w-24 items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-slate-700">
@@ -75,15 +88,13 @@ export function DiscardStack({
               onSelectCard(entry.card.id);
             };
 
-            const marginTop = index === 0 ? 0 : -overlapOffset;
-
             return (
               <div
                 key={entry.card.id}
-                className="relative"
+                className="absolute left-1/2 -translate-x-1/2"
                 style={{
                   zIndex: index + 1,
-                  marginTop,
+                  top: index * cardSpacing,
                 }}
               >
                 <PlayingCard
@@ -95,6 +106,7 @@ export function DiscardStack({
                   highlight={isSelected ? "glow" : "none"}
                   showStatusBadge={isSelected}
                   statusLabel="เลือกอยู่"
+                  showHeadBadge
                 />
               </div>
             );

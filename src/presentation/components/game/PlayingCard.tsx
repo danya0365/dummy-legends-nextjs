@@ -17,6 +17,7 @@ interface PlayingCardProps {
   showBottomRank?: boolean;
   showCardValue?: boolean;
   showSuitBadge?: boolean;
+  showHeadBadge?: boolean;
 }
 
 const suitConfig = {
@@ -135,11 +136,26 @@ export function PlayingCard({
   showBottomRank = false,
   showCardValue = false,
   showSuitBadge = false,
+  showHeadBadge = false,
 }: PlayingCardProps) {
   const suit =
     suitConfig[card.suit as keyof typeof suitConfig] ?? suitConfig.spades;
   const preset = sizePresets[size];
   const interactive = typeof onClick === "function" && !disabled;
+
+  const shouldShowHeadBadge = showHeadBadge && card.isHead;
+  const headBadgeOffset =
+    size === "small"
+      ? "top-1.5 right-1.5"
+      : size === "large"
+      ? "top-3 right-3"
+      : "top-2 right-2";
+  const headBadgeClasses =
+    size === "small"
+      ? "text-[9px] px-2 py-0.5"
+      : size === "large"
+      ? "text-sm px-3 py-1.5"
+      : "text-xs px-2.5 py-1";
 
   const baseClasses = cn(
     "relative overflow-hidden border-2 bg-white/90 shadow-lg transition-all duration-200 backdrop-blur-sm",
@@ -148,10 +164,11 @@ export function PlayingCard({
     preset.padding,
     preset.radius,
     suit.gradient,
-    selected ? "border-indigo-400 shadow-indigo-300/60" : "border-white/60",
+    selected
+      ? "border-indigo-400 shadow-[0_10px_25px_rgba(79,70,229,0.35)]"
+      : "border-slate-200/90 dark:border-slate-700/70 shadow-[0_8px_20px_rgba(15,23,42,0.12)] dark:shadow-[0_6px_18px_rgba(15,23,42,0.45)]",
     interactive && "hover:-translate-y-1.5 hover:shadow-xl",
-    disabled && "opacity-60 cursor-not-allowed",
-    !disabled && interactive && "cursor-pointer"
+    disabled ? "cursor-not-allowed" : interactive ? "cursor-pointer" : ""
   );
 
   const highlightClasses = cn({
@@ -190,6 +207,19 @@ export function PlayingCard({
         </div>
       )}
 
+      {shouldShowHeadBadge && (
+        <div className={cn("absolute z-20", headBadgeOffset)}>
+          <span
+            className={cn(
+              "rounded-full bg-amber-500/95 text-white font-semibold tracking-wide shadow-sm",
+              headBadgeClasses
+            )}
+          >
+            หัว
+          </span>
+        </div>
+      )}
+
       <div
         className={cn("absolute inset-0 border border-white/50", preset.radius)}
       />
@@ -209,7 +239,11 @@ export function PlayingCard({
             className={cn(
               "mt-0.5 font-semibold drop-shadow-sm",
               suit.textClass,
-              size === "small" ? "text-xs" : size === "large" ? "text-lg" : "text-sm"
+              size === "small"
+                ? "text-xs"
+                : size === "large"
+                ? "text-lg"
+                : "text-sm"
             )}
           >
             {suit.symbol}
