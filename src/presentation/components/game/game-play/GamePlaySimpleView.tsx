@@ -2,14 +2,14 @@
 
 import {
   ArrowLeft,
+  Flower,
   HandCoins,
+  ListOrdered,
   RefreshCw,
   Sparkles,
   Trophy,
   Users,
   XCircle,
-  ListOrdered,
-  Flower,
 } from "lucide-react";
 import { CardBack, PlayingCard } from "../PlayingCard";
 import { DiscardStack } from "./DiscardStack";
@@ -109,12 +109,16 @@ export function GamePlaySimpleView({
     if (!ownerId) return "ผู้เล่น";
     if (ownerId === gamerId) return "คุณ";
 
-    const roomPlayer = currentRoom?.players.find((player) => player.userId === ownerId);
+    const roomPlayer = currentRoom?.players.find(
+      (player) => player.userId === ownerId
+    );
     if (roomPlayer) {
       return roomPlayer.displayName || roomPlayer.username || "ผู้เล่น";
     }
 
-    const otherPlayer = otherPlayers.find((player) => player.gamerId === ownerId);
+    const otherPlayer = otherPlayers.find(
+      (player) => player.gamerId === ownerId
+    );
     return otherPlayer?.displayName || "ผู้เล่น";
   };
   return (
@@ -232,14 +236,18 @@ export function GamePlaySimpleView({
                     </div>
                     <div className="mt-3 flex items-center justify-between">
                       <div className="flex items-center">
-                        {Array.from({ length: previewCount }).map((_, index) => (
-                          <div
-                            key={index}
-                            className={index === 0 ? "relative" : "relative -ml-5"}
-                          >
-                            <CardBack size="small" />
-                          </div>
-                        ))}
+                        {Array.from({ length: previewCount }).map(
+                          (_, index) => (
+                            <div
+                              key={index}
+                              className={
+                                index === 0 ? "relative" : "relative -ml-5"
+                              }
+                            >
+                              <CardBack size="small" />
+                            </div>
+                          )
+                        )}
                         {remainingCards > 0 && (
                           <span className="ml-3 text-xs font-semibold text-gray-500 dark:text-gray-300">
                             +{remainingCards}
@@ -275,7 +283,7 @@ export function GamePlaySimpleView({
                     ${
                       actionAvailability.canDrawFromDeck && !isLoading
                         ? "hover:scale-110 cursor-pointer"
-                        : "opacity-50 cursor-not-allowed"
+                        : "cursor-not-allowed"
                     }
                   `}
                 >
@@ -299,7 +307,9 @@ export function GamePlaySimpleView({
                     isLoading ||
                     !selectedDiscardCardId
                   }
-                  disableSelection={!actionAvailability.canSelectDiscardCard || isLoading}
+                  disableSelection={
+                    !actionAvailability.canSelectDiscardCard || isLoading
+                  }
                   cardSize="medium"
                 />
                 {isDiscardAssistActive && (
@@ -307,15 +317,24 @@ export function GamePlaySimpleView({
                     <p>เลือกจากกองทิ้ง {discardSelectionCount} ใบแล้ว</p>
                     {remainingCardsNeededForMeld > 0 ? (
                       <p>
-                        ต้องเลือกไพ่ในมืออีก {Math.max(remainingCardsNeededForMeld, requiredHandCardsForSelectedDiscard)} ใบ
-                        (เลือกแล้ว {pendingMeldCardIds.length}) เพื่อให้ครบอย่างน้อย {totalSelectedForMeld} ใบ
+                        ต้องเลือกไพ่ในมืออีก{" "}
+                        {Math.max(
+                          remainingCardsNeededForMeld,
+                          requiredHandCardsForSelectedDiscard
+                        )}{" "}
+                        ใบ (เลือกแล้ว {pendingMeldCardIds.length})
+                        เพื่อให้ครบอย่างน้อย {totalSelectedForMeld} ใบ
                       </p>
                     ) : (
-                      <p>ครบขั้นต่ำสำหรับเกิดแล้ว กด &quot;เกิดไพ่&quot; เพื่อยืนยันได้เลย</p>
+                      <p>
+                        ครบขั้นต่ำสำหรับเกิดแล้ว กด &quot;เกิดไพ่&quot;
+                        เพื่อยืนยันได้เลย
+                      </p>
                     )}
                     {isDiscardMeldFlow && !isSelectingMeld && (
                       <p className="text-indigo-600 dark:text-indigo-300">
-                        กดปุ่ม &quot;โหมดเกิดไพ่&quot; เพื่อเลือกไพ่ในมือรวมกับกองทิ้ง
+                        กดปุ่ม &quot;โหมดเกิดไพ่&quot;
+                        เพื่อเลือกไพ่ในมือรวมกับกองทิ้ง
                       </p>
                     )}
                   </div>
@@ -391,9 +410,7 @@ export function GamePlaySimpleView({
                 <button
                   onClick={onStartMeldSelection}
                   className="px-4 py-2 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-200 rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={
-                    shouldDisableMeldMode
-                  }
+                  disabled={shouldDisableMeldMode}
                 >
                   <Sparkles className="h-4 w-4" />
                   {isDiscardMeldFlow ? "เลือกไพ่ในมือ" : "โหมดเกิดไพ่"}
@@ -402,7 +419,9 @@ export function GamePlaySimpleView({
 
               {isDiscardMeldFlow && !isSelectingMeld && (
                 <p className="text-xs text-indigo-600 dark:text-indigo-300">
-                  ต้องเลือกไพ่ในมือ {Math.max(requiredHandCardsForSelectedDiscard, 1)} ใบเพื่อผสมกับกองทิ้ง
+                  ต้องเลือกไพ่ในมือ{" "}
+                  {Math.max(requiredHandCardsForSelectedDiscard, 1)}{" "}
+                  ใบเพื่อผสมกับกองทิ้ง
                 </p>
               )}
 
@@ -428,9 +447,7 @@ export function GamePlaySimpleView({
                 <button
                   onClick={onStartLayoffSelection}
                   className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-200 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={
-                    shouldDisableLayoffMode
-                  }
+                  disabled={shouldDisableLayoffMode}
                 >
                   <HandCoins className="h-4 w-4" />
                   โหมดฝากไพ่
@@ -456,7 +473,11 @@ export function GamePlaySimpleView({
                 </button>
                 <button
                   onClick={onDiscard}
-                  disabled={!actionAvailability.canDiscardCard || !selectedCardId || isLoading}
+                  disabled={
+                    !actionAvailability.canDiscardCard ||
+                    !selectedCardId ||
+                    isLoading
+                  }
                   className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {selectedCardId ? "ทิ้งไพ่ใบนี้" : "เลือกไพ่เพื่อทิ้ง"}
@@ -541,7 +562,9 @@ export function GamePlaySimpleView({
                       key={meld.meldId}
                       type="button"
                       onClick={() => handleLayoffTargetClick(meld.meldId)}
-                      disabled={!isSelectingLayoff || availableLayoffTargets === 0}
+                      disabled={
+                        !isSelectingLayoff || availableLayoffTargets === 0
+                      }
                       className={`w-full rounded-lg border p-3 text-left transition ${
                         isTarget
                           ? "border-indigo-500 ring-2 ring-indigo-300 dark:ring-indigo-700"
@@ -608,9 +631,8 @@ export function GamePlaySimpleView({
                     >
                       <div className="flex items-center justify-between mb-2 text-sm text-gray-600 dark:text-gray-400">
                         <span>
-                          กองของ {resolveMeldOwnerName(meld.ownerGamerId)} ({
-                            meld.cards.length
-                          } ใบ)
+                          กองของ {resolveMeldOwnerName(meld.ownerGamerId)} (
+                          {meld.cards.length} ใบ)
                         </span>
                         {isTarget && isSelectingLayoff && (
                           <span className="text-indigo-500 dark:text-indigo-300 font-medium">
