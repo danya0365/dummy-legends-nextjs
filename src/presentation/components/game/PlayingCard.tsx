@@ -195,14 +195,25 @@ export function PlayingCard({
       />
 
       <div className="relative z-10 flex items-start justify-between">
-        <div
-          className={cn(
-            "font-semibold drop-shadow-sm",
-            suit.textClass,
-            preset.rank
-          )}
-        >
-          {card.rank}
+        <div className="flex flex-col items-start leading-none">
+          <span
+            className={cn(
+              "font-semibold drop-shadow-sm",
+              suit.textClass,
+              preset.rank
+            )}
+          >
+            {card.rank}
+          </span>
+          <span
+            className={cn(
+              "mt-0.5 font-semibold drop-shadow-sm",
+              suit.textClass,
+              size === "small" ? "text-xs" : size === "large" ? "text-lg" : "text-sm"
+            )}
+          >
+            {suit.symbol}
+          </span>
         </div>
         {showSuitBadge && (
           <div
