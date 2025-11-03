@@ -166,7 +166,7 @@ export function PlayingCard({
     suit.gradient,
     selected
       ? "border-indigo-400 shadow-[0_10px_25px_rgba(79,70,229,0.35)]"
-      : "border-slate-200/90 dark:border-slate-700/70 shadow-[0_8px_20px_rgba(15,23,42,0.12)] dark:shadow-[0_6px_18px_rgba(15,23,42,0.45)]",
+      : "border-slate-200/90 shadow-[0_8px_20px_rgba(15,23,42,0.12)] dark:shadow-[0_6px_18px_rgba(15,23,42,0.45)]",
     interactive && "hover:-translate-y-1.5 hover:shadow-xl",
     disabled ? "cursor-not-allowed" : interactive ? "cursor-pointer" : ""
   );
@@ -180,7 +180,7 @@ export function PlayingCard({
   const content = (
     <>
       {disabled && (
-        <div className="absolute inset-0 z-10 rounded-[inherit] backdrop-blur-[1px] bg-slate-900/10" />
+        <div className="absolute inset-0 z-10 rounded-[inherit] backdrop-blur-[1px]" />
       )}
 
       <div
