@@ -179,6 +179,10 @@ export function PlayingCard({
 
   const content = (
     <>
+      {disabled && (
+        <div className="absolute inset-0 z-10 rounded-[inherit] backdrop-blur-[1px] bg-slate-900/10" />
+      )}
+
       <div
         className="absolute inset-0 opacity-10"
         style={{
@@ -188,7 +192,7 @@ export function PlayingCard({
       />
 
       {showStatusBadge && selected && (
-        <div className="absolute left-2 top-2 z-20">
+        <div className="absolute left-2 top-2 z-30">
           <span
             className={cn(
               "inline-flex items-center gap-1 rounded-full bg-indigo-600/90 text-white",
@@ -208,7 +212,7 @@ export function PlayingCard({
       )}
 
       {shouldShowHeadBadge && (
-        <div className={cn("absolute z-20", headBadgeOffset)}>
+        <div className={cn("absolute z-30", headBadgeOffset)}>
           <span
             className={cn(
               "rounded-full bg-amber-500/95 text-white font-semibold tracking-wide shadow-sm",
