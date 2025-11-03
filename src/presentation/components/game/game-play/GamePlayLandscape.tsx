@@ -12,6 +12,8 @@ import {
   Menu,
   Info,
   LayoutList,
+  ListOrdered,
+  Flower,
 } from "lucide-react";
 import { PlayingCard, CardBack } from "../PlayingCard";
 import { DiscardStack } from "./DiscardStack";
@@ -80,6 +82,8 @@ export function GamePlayLandscape({
   onSelectLayoffTarget,
   onDiscard,
   onRefresh,
+  onSortHandByRank,
+  onSortHandBySuit,
 }: GamePlayLayoutProps) {
   void _hasDrawn;
   const arenaRef = useRef<HTMLDivElement | null>(null);
@@ -496,14 +500,34 @@ export function GamePlayLandscape({
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={onDiscard}
-                  disabled={!actionAvailability.canDiscardCard || !selectedCardId || isLoading}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {selectedCardId ? "ทิ้งไพ่ใบนี้" : "เลือกไพ่เพื่อทิ้ง"}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onSortHandByRank}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 rounded-full bg-blue-100 px-5 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500/20 dark:text-blue-200 dark:hover:bg-blue-500/30"
+                  >
+                    <ListOrdered className="h-4 w-4" />
+                    เรียงตามแต้ม
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSortHandBySuit}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 rounded-full bg-purple-100 px-5 py-2 text-sm font-semibold text-purple-700 transition hover:bg-purple-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-purple-500/20 dark:text-purple-200 dark:hover:bg-purple-500/30"
+                  >
+                    <Flower className="h-4 w-4" />
+                    เรียงตามดอก
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDiscard}
+                    disabled={!actionAvailability.canDiscardCard || !selectedCardId || isLoading}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {selectedCardId ? "ทิ้งไพ่ใบนี้" : "เลือกไพ่เพื่อทิ้ง"}
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2 justify-center">

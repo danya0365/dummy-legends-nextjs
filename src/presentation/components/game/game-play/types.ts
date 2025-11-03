@@ -97,4 +97,6 @@ export interface GamePlayLayoutProps {
   onSelectLayoffTarget: (meldId: string | null) => void;
   onDiscard: () => void;
   onRefresh: () => void;
+  onSortHandByRank: () => void;
+  onSortHandBySuit: () => void;
 }

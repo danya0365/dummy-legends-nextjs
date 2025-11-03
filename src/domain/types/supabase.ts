@@ -1218,6 +1218,22 @@ export type Database = {
         }
         Returns: boolean
       }
+      sort_hand_by_rank: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_guest_identifier?: string
+        }
+        Returns: boolean
+      }
+      sort_hand_by_suit: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_guest_identifier?: string
+        }
+        Returns: boolean
+      }
       start_game_session: {
         Args: {
           p_room_id: string

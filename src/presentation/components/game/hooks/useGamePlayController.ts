@@ -39,6 +39,8 @@ export function useGamePlayController({
     subscribeToGameSession,
     drawCard,
     discardCard,
+    sortHandByRank,
+    sortHandBySuit,
     createMeld,
     startMeldSelection,
     cancelMeldSelection,
@@ -693,6 +695,8 @@ export function useGamePlayController({
     onSelectLayoffTarget: handleSelectLayoffTarget,
     onDiscard: handleDiscard,
     onRefresh: handleRefresh,
+    onSortHandByRank: sortHandByRank,
+    onSortHandBySuit: sortHandBySuit,
   };
 
   return {

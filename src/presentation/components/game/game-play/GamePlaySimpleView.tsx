@@ -8,6 +8,8 @@ import {
   Trophy,
   Users,
   XCircle,
+  ListOrdered,
+  Flower,
 } from "lucide-react";
 import { CardBack, PlayingCard } from "../PlayingCard";
 import { DiscardStack } from "./DiscardStack";
@@ -72,6 +74,8 @@ export function GamePlaySimpleView({
   onSelectLayoffTarget,
   onDiscard,
   onRefresh,
+  onSortHandByRank,
+  onSortHandBySuit,
 }: GamePlayLayoutProps) {
   void _hasDrawn;
   void _turnActionAllowedActions;
@@ -360,7 +364,7 @@ export function GamePlaySimpleView({
 
         {/* My Hand */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">
               ไพ่ของคุณ ({myHand.length} ใบ)
             </h3>
@@ -433,13 +437,31 @@ export function GamePlaySimpleView({
                 </button>
               )}
 
-              <button
-                onClick={onDiscard}
-                disabled={!actionAvailability.canDiscardCard || !selectedCardId || isLoading}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {selectedCardId ? "ทิ้งไพ่ใบนี้" : "เลือกไพ่เพื่อทิ้ง"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={onSortHandByRank}
+                  disabled={isLoading}
+                  className="px-3 py-2 text-sm bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-200 rounded-lg flex items-center gap-2 hover:bg-blue-200 dark:hover:bg-blue-900/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ListOrdered className="h-4 w-4" />
+                  เรียงตามแต้ม
+                </button>
+                <button
+                  onClick={onSortHandBySuit}
+                  disabled={isLoading}
+                  className="px-3 py-2 text-sm bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-200 rounded-lg flex items-center gap-2 hover:bg-purple-200 dark:hover:bg-purple-900/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Flower className="h-4 w-4" />
+                  เรียงตามดอก
+                </button>
+                <button
+                  onClick={onDiscard}
+                  disabled={!actionAvailability.canDiscardCard || !selectedCardId || isLoading}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {selectedCardId ? "ทิ้งไพ่ใบนี้" : "เลือกไพ่เพื่อทิ้ง"}
+                </button>
+              </div>
             </div>
           </div>
 

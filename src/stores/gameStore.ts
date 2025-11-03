@@ -356,6 +356,8 @@ interface GameStore extends RoomState {
   selectLayoffTarget: (meldId: string | null) => void;
   confirmLayoff: () => Promise<void>;
   discardCard: (cardId: string) => Promise<void>;
+  sortHandByRank: () => Promise<void>;
+  sortHandBySuit: () => Promise<void>;
   subscribeToGameSession: (sessionId: string) => Promise<void>;
   unsubscribeFromGame: () => Promise<void>;
   getActiveSessionForRoom: (roomId: string) => Promise<string | null>;
@@ -2244,6 +2246,66 @@ export const useGameStore = create<GameStore>((set, get) => ({
         error: error instanceof Error ? error.message : "ไม่สามารถทิ้งไพ่ได้",
       });
       throw error;
+    }
+  },
+
+  sortHandByRank: async () => {
+    try {
+      const { currentSession, gamerId, guestId } = get();
+      if (!currentSession || !gamerId) {
+        throw new Error("ไม่พบเซสชันเกม");
+      }
+
+      set({ isLoading: true });
+
+      const { error } = await supabase.rpc("sort_hand_by_rank", {
+        p_session_id: currentSession.id,
+        p_gamer_id: gamerId,
+        p_guest_identifier: guestId || undefined,
+      });
+
+      if (error) throw error;
+
+      await get().loadGameState(currentSession.id);
+    } catch (error) {
+      console.error("Failed to sort hand by rank:", error);
+      set({
+        error:
+          error instanceof Error ? error.message : "ไม่สามารถจัดเรียงไพ่ตามแต้มได้",
+      });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  sortHandBySuit: async () => {
+    try {
+      const { currentSession, gamerId, guestId } = get();
+      if (!currentSession || !gamerId) {
+        throw new Error("ไม่พบเซสชันเกม");
+      }
+
+      set({ isLoading: true });
+
+      const { error } = await supabase.rpc("sort_hand_by_suit", {
+        p_session_id: currentSession.id,
+        p_gamer_id: gamerId,
+        p_guest_identifier: guestId || undefined,
+      });
+
+      if (error) throw error;
+
+      await get().loadGameState(currentSession.id);
+    } catch (error) {
+      console.error("Failed to sort hand by suit:", error);
+      set({
+        error:
+          error instanceof Error ? error.message : "ไม่สามารถจัดเรียงไพ่ตามดอกได้",
+      });
+      throw error;
+    } finally {
+      set({ isLoading: false });
     }
   },
 
