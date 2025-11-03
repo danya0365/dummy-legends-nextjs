@@ -74,6 +74,7 @@ export function useGamePlayController({
 
   const discardSelectionCount =
     turnActionState.context.discardSelectionCount ?? 0;
+  const discardPickupCount = turnActionState.context.discardPickupCount ?? 0;
   const totalMeldSelectionCount =
     turnActionState.context.totalMeldSelectionCount ??
     pendingMeldCardIds.length + discardSelectionCount;
@@ -661,6 +662,7 @@ export function useGamePlayController({
     pendingMeldCardIds,
     pendingMeldSet,
     discardSelectionCount,
+    discardPickupCount,
     totalMeldSelectionCount,
     remainingCardsNeededForMeld,
     requiredHandCardsForSelectedDiscard,

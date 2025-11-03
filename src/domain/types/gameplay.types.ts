@@ -72,6 +72,7 @@ export type TurnActionMode =
 
 export interface TurnActionContext {
   discardSelectionCount?: number;
+  discardPickupCount?: number;
   requiredHandCardsForSelectedDiscard?: number;
   remainingHandCardsNeeded?: number;
   totalMeldSelectionCount?: number;
@@ -80,6 +81,8 @@ export interface TurnActionContext {
   allowDrawFromDiscard?: boolean;
   isDiscardMeld?: boolean;
   minimumHandCardsRequiredForMeld?: number;
+  selectedDiscardPickupCardIds?: string[];
+  selectedDiscardMeldCardIds?: string[];
 }
 
 export interface TurnActionState {

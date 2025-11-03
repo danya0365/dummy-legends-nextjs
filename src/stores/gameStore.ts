@@ -291,6 +291,8 @@ interface GameStore extends RoomState {
   targetMeldId: string | null;
   pendingLayoffCardIds: string[];
   selectedDiscardCardId: string | null;
+  selectedDiscardPickupCardIds: string[];
+  selectedDiscardMeldCardIds: string[];
   hasDrawnThisTurn: boolean;
   turnActionState: TurnActionState;
 
@@ -413,6 +415,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   targetMeldId: null,
   pendingLayoffCardIds: [],
   selectedDiscardCardId: null,
+  selectedDiscardPickupCardIds: [],
+  selectedDiscardMeldCardIds: [],
   hasDrawnThisTurn: false,
   turnActionState: {
     mode: "idle",
@@ -739,8 +743,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const selectedIndex = cardId
         ? discardEntries.findIndex((entry) => entry.card.id === cardId)
         : -1;
-      const discardSelectionCount =
-        selectedIndex >= 0 ? discardEntries.length - selectedIndex : 0;
+      const selectedPickupCardIds =
+        selectedIndex >= 0
+          ? discardEntries
+              .slice(selectedIndex)
+              .map((entry) => entry.card.id)
+          : [];
+      const selectedMeldCardIds =
+        selectedIndex >= 0 && cardId
+          ? [cardId]
+          : [];
+      const discardPickupCount = selectedPickupCardIds.length;
+      const discardSelectionCount = selectedMeldCardIds.length;
+
+      console.log("[selectDiscardCard] pickupIds=%o meldIds=%o", selectedPickupCardIds, selectedMeldCardIds);
 
       const allowDrawFromDiscard = discardEntries.length > 0;
       const requiredHandCardsForSelectedDiscard = Math.max(
@@ -751,6 +767,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ...state.turnActionState.context,
         allowDrawFromDiscard,
         discardSelectionCount,
+        discardPickupCount,
         requiredHandCardsForSelectedDiscard,
         remainingHandCardsNeeded: requiredHandCardsForSelectedDiscard,
         totalMeldSelectionCount: discardSelectionCount,
@@ -759,6 +776,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           3 - discardSelectionCount
         ),
         isDiscardMeld: Boolean(cardId),
+        selectedDiscardPickupCardIds: selectedPickupCardIds,
+        selectedDiscardMeldCardIds: selectedMeldCardIds,
       };
 
       if (!cardId) {
@@ -781,6 +800,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
         return {
           selectedDiscardCardId: null,
+          selectedDiscardPickupCardIds: [],
+          selectedDiscardMeldCardIds: [],
           pendingMeldCardIds: [],
           isSelectingMeld: false,
           turnActionState: {
@@ -790,10 +811,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
               ...nextContext,
               isDiscardMeld: false,
               discardSelectionCount: 0,
+              discardPickupCount: 0,
               requiredHandCardsForSelectedDiscard: 3,
               remainingHandCardsNeeded: 3,
               totalMeldSelectionCount: 0,
               remainingCardsNeededForMeld: 3,
+              selectedDiscardPickupCardIds: [],
+              selectedDiscardMeldCardIds: [],
             },
           },
         };
@@ -801,6 +825,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       return {
         selectedDiscardCardId: cardId,
+        selectedDiscardPickupCardIds: selectedPickupCardIds,
+        selectedDiscardMeldCardIds: selectedMeldCardIds,
         pendingMeldCardIds: [],
         isSelectingMeld: Boolean(cardId),
         turnActionState: cardId
@@ -833,6 +859,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
               context: {
                 ...nextContext,
                 isDiscardMeld: false,
+                discardPickupCount: 0,
+                selectedDiscardPickupCardIds: [],
+                selectedDiscardMeldCardIds: [],
               },
             },
       };
@@ -1858,6 +1887,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           pendingMeldCardIds: [],
           isSelectingMeld: false,
           selectedDiscardCardId: null,
+          selectedDiscardPickupCardIds: [],
+          selectedDiscardMeldCardIds: [],
         });
       }
     } catch (error) {

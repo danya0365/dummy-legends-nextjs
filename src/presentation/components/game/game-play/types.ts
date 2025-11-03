@@ -49,6 +49,7 @@ export interface GamePlayLayoutProps {
   pendingMeldCardIds: string[];
   pendingMeldSet: Set<string>;
   discardSelectionCount: number;
+  discardPickupCount: number;
   totalMeldSelectionCount: number;
   remainingCardsNeededForMeld: number;
   requiredHandCardsForSelectedDiscard: number;

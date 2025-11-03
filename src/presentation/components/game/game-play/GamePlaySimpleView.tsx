@@ -41,6 +41,7 @@ export function GamePlaySimpleView({
   pendingMeldCardIds,
   pendingMeldSet,
   discardSelectionCount,
+  discardPickupCount,
   totalMeldSelectionCount,
   remainingCardsNeededForMeld,
   requiredHandCardsForSelectedDiscard,
@@ -318,6 +319,9 @@ export function GamePlaySimpleView({
                 </button>
                 {isDiscardAssistActive && (
                   <div className="mt-2 space-y-1 text-xs text-blue-700 dark:text-blue-300">
+                    {discardPickupCount > 0 && (
+                      <p>หยิบจากกองทิ้งขึ้นมือ {discardPickupCount} ใบ</p>
+                    )}
                     <p>เลือกจากกองทิ้ง {discardSelectionCount} ใบแล้ว</p>
                     {remainingCardsNeededForMeld > 0 ? (
                       <p>
