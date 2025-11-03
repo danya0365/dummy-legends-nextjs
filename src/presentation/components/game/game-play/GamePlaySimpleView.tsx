@@ -26,7 +26,7 @@ export function GamePlaySimpleView({
   communityMelds,
   discardStack,
   isMyTurn,
-  hasDrawn: _hasDrawn,
+  hasDrawn,
   selectedCardId,
   selectedDiscardCardId,
   remainingSeconds,
@@ -56,7 +56,6 @@ export function GamePlaySimpleView({
   currentTurnPlayerName,
   turnActionMode,
   actionAvailability,
-  turnActionAllowedActions: _turnActionAllowedActions,
   turnActionContext: _turnActionContext,
   onBack,
   onDrawFromDeck,
@@ -77,8 +76,6 @@ export function GamePlaySimpleView({
   onSortHandByRank,
   onSortHandBySuit,
 }: GamePlayLayoutProps) {
-  void _hasDrawn;
-  void _turnActionAllowedActions;
   void _turnActionContext;
   const availableLayoffTargets = myMelds.length + tableMelds.length;
   const opponentMeldCount = communityMelds.length;
@@ -300,18 +297,25 @@ export function GamePlaySimpleView({
                   stack={discardStack}
                   selectedCardId={selectedDiscardCardId}
                   onSelectCard={onSelectDiscardCard}
-                  onDrawFromDiscard={onDrawFromDiscard}
-                  drawButtonLabel="เก็บกองทิ้ง"
-                  drawButtonDisabled={
-                    !actionAvailability.canDrawFromDiscard ||
-                    isLoading ||
-                    !selectedDiscardCardId
-                  }
+                  onDrawFromDiscard={() => {}}
+                  drawButtonLabel=""
+                  drawButtonDisabled
                   disableSelection={
                     !actionAvailability.canSelectDiscardCard || isLoading
                   }
                   cardSize="medium"
                 />
+                <button
+                  className="mt-3 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={onDrawFromDiscard}
+                  disabled={
+                    !selectedDiscardCardId ||
+                    isLoading ||
+                    !actionAvailability.canDrawFromDiscard
+                  }
+                >
+                  หยิบจากกองเพื่อเกิด
+                </button>
                 {isDiscardAssistActive && (
                   <div className="mt-2 space-y-1 text-xs text-blue-700 dark:text-blue-300">
                     <p>เลือกจากกองทิ้ง {discardSelectionCount} ใบแล้ว</p>
@@ -399,7 +403,11 @@ export function GamePlaySimpleView({
                   </button>
                   <button
                     onClick={onConfirmMeld}
-                    disabled={!canConfirmMeld || isLoading}
+                    disabled={
+                      !canConfirmMeld ||
+                      isLoading ||
+                      (!hasDrawn && !selectedDiscardCardId)
+                    }
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     <Sparkles className="h-4 w-4" />

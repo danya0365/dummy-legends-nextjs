@@ -479,6 +479,7 @@ export function useGamePlayController({
         );
         break;
       case "selecting_discard":
+      case "assembling_discard_meld":
         setGuidanceMessage("เลือกไพ่ในมือเพื่อรวมกับกองทิ้ง");
         break;
       case "selecting_meld":

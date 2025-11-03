@@ -735,16 +735,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   selectDiscardCard: (cardId: string | null) => {
     set((state) => {
       const discardEntries = state.discardStack?.entries ?? [];
-      const selectedEntry = cardId
-        ? discardEntries.find((entry) => entry.card.id === cardId)
-        : null;
 
+      const selectedIndex = cardId
+        ? discardEntries.findIndex((entry) => entry.card.id === cardId)
+        : -1;
       const discardSelectionCount =
-        cardId && selectedEntry
-          ? discardEntries.filter(
-              (entry) => entry.card.position <= selectedEntry.card.position
-            ).length
-          : 0;
+        selectedIndex >= 0 ? discardEntries.length - selectedIndex : 0;
 
       const allowDrawFromDiscard = discardEntries.length > 0;
       const requiredHandCardsForSelectedDiscard = Math.max(
@@ -806,16 +802,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return {
         selectedDiscardCardId: cardId,
         pendingMeldCardIds: [],
-        isSelectingMeld: false,
-        turnActionState: {
-          mode: "selecting_discard_meld",
-          allowedActions: [
-            "select_discard_card",
-            "start_meld_selection",
-            "cancel_selection",
-          ],
-          context: nextContext,
-        },
+        isSelectingMeld: Boolean(cardId),
+        turnActionState: cardId
+          ? {
+              mode: "assembling_discard_meld",
+              allowedActions: [
+                "select_discard_card",
+                "toggle_meld_card",
+                "confirm_meld",
+                "draw_from_discard",
+                "cancel_selection",
+              ],
+              context: nextContext,
+            }
+          : {
+              mode: state.hasDrawnThisTurn ? "awaiting_discard" : "awaiting_draw",
+              allowedActions: state.hasDrawnThisTurn
+                ? [
+                    "select_hand_card",
+                    "discard_card",
+                    "start_meld_selection",
+                    "start_layoff_selection",
+                  ]
+                : [
+                    "draw_from_deck",
+                    "draw_from_discard",
+                    "select_discard_card",
+                    "start_meld_selection",
+                  ],
+              context: {
+                ...nextContext,
+                isDiscardMeld: false,
+              },
+            },
       };
     });
   },
