@@ -52,8 +52,8 @@ const sizePresets = {
     container: "w-14 h-20",
     padding: "p-1.5",
     radius: "rounded-xl",
-    rank: "text-base",
-    symbolCenter: "text-3xl",
+    rank: "text-sm",
+    symbolCenter: "text-2xl",
     statusBadge: "text-[9px] px-2 py-0.5",
     statusDot: "h-1.5 w-1.5",
     suitBadge: "px-2 py-0.5 text-[9px]",
@@ -241,13 +241,13 @@ export function PlayingCard({
           </span>
           <span
             className={cn(
-              "mt-0.5 font-semibold drop-shadow-sm",
+              "font-semibold drop-shadow-sm",
               suit.textClass,
               size === "small"
-                ? "text-xs"
+                ? "text-[13px]"
                 : size === "large"
-                ? "text-lg"
-                : "text-sm"
+                ? "mt-1 text-lg"
+                : "mt-0.5 text-sm"
             )}
           >
             {suit.symbol}
