@@ -43,6 +43,8 @@ export function GamePlayLandscape({
   hasDrawn: _hasDrawn,
   selectedCardId,
   selectedDiscardCardId,
+  selectedDiscardPickupCardIds,
+  selectedDiscardMeldCardIds,
   remainingSeconds,
   formattedRemaining,
   timerPercentage,
@@ -84,6 +86,7 @@ export function GamePlayLandscape({
   onRefresh,
   onSortHandByRank,
   onSortHandBySuit,
+  isDiscardMeldFlow,
 }: GamePlayLayoutProps) {
   void _hasDrawn;
   const arenaRef = useRef<HTMLDivElement | null>(null);
@@ -157,9 +160,7 @@ export function GamePlayLandscape({
       })),
       ...tableMelds.map((meld) => ({
         id: meld.meldId,
-        label: `กองของ ${resolveMeldOwnerName(meld.ownerGamerId)} (${
-          meld.cards.length
-        } ใบ)`,
+        label: `กองของ ${resolveMeldOwnerName(meld.ownerGamerId)} (${meld.cards.length} ใบ)`,
         cards: meld.cards,
       })),
     ],
@@ -390,6 +391,8 @@ export function GamePlayLandscape({
                 <DiscardStack
                   stack={discardStack}
                   selectedCardId={selectedDiscardCardId}
+                  highlightedCardIds={selectedDiscardPickupCardIds}
+                  meldCardIds={selectedDiscardMeldCardIds}
                   onSelectCard={onSelectDiscardCard}
                   onDrawFromDiscard={onDrawFromDiscard}
                   drawButtonLabel="เก็บกองทิ้ง"
@@ -432,7 +435,7 @@ export function GamePlayLandscape({
 
             <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-4">
               <div className="flex flex-wrap items-center justify-center gap-3">
-                {isSelectingMeld ? (
+                {isDiscardMeldFlow ? null : isSelectingMeld ? (
                   <>
                     <button
                       type="button"

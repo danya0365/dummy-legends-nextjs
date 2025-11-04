@@ -735,52 +735,132 @@ export const useGameStore = create<GameStore>((set, get) => ({
       throw error;
     }
   },
-
   selectDiscardCard: (cardId: string | null) => {
     set((state) => {
       const discardEntries = state.discardStack?.entries ?? [];
+      if (discardEntries.length === 0) {
+        return {};
+      }
 
-      const selectedIndex = cardId
-        ? discardEntries.findIndex((entry) => entry.card.id === cardId)
-        : -1;
-      const selectedPickupCardIds =
-        selectedIndex >= 0
-          ? discardEntries
-              .slice(selectedIndex)
-              .map((entry) => entry.card.id)
-          : [];
-      const selectedMeldCardIds =
-        selectedIndex >= 0 && cardId
-          ? [cardId]
-          : [];
-      const discardPickupCount = selectedPickupCardIds.length;
-      const discardSelectionCount = selectedMeldCardIds.length;
+      const findIndex = (id: string | null) =>
+        id
+          ? discardEntries.findIndex((entry) => entry.card.id === id)
+          : -1;
 
-      console.log("[selectDiscardCard] pickupIds=%o meldIds=%o", selectedPickupCardIds, selectedMeldCardIds);
+      const entriesWithMeta = discardEntries.map((entry, index) => ({
+        entry,
+        index,
+        position: entry.card.position ?? index,
+      }));
 
-      const allowDrawFromDiscard = discardEntries.length > 0;
-      const requiredHandCardsForSelectedDiscard = Math.max(
-        0,
-        3 - discardSelectionCount
-      );
-      const nextContext: TurnActionContext = {
-        ...state.turnActionState.context,
-        allowDrawFromDiscard,
-        discardSelectionCount,
-        discardPickupCount,
-        requiredHandCardsForSelectedDiscard,
-        remainingHandCardsNeeded: requiredHandCardsForSelectedDiscard,
-        totalMeldSelectionCount: discardSelectionCount,
-        remainingCardsNeededForMeld: Math.max(
+      const topOrder = entriesWithMeta
+        .slice()
+        .sort((a, b) => {
+          if (a.position === b.position) {
+            return b.index - a.index;
+          }
+          return b.position - a.position;
+        })
+        .map((meta) => meta.index);
+
+      const indexToRank = new Map<number, number>();
+      topOrder.forEach((originalIndex, rank) => {
+        indexToRank.set(originalIndex, rank);
+      });
+
+      const getRank = (originalIndex: number) =>
+        indexToRank.get(originalIndex) ?? Number.POSITIVE_INFINITY;
+
+      const buildSelectionStateFromIndices = (
+        primaryIndex: number,
+        meldIndices: number[],
+        options?: { resetPending?: boolean }
+      ): Partial<GameStore> => {
+        const primaryEntry = discardEntries[primaryIndex];
+        if (!primaryEntry) {
+          return {};
+        }
+
+        const uniqueIndices = Array.from(
+          new Set([primaryIndex, ...meldIndices.filter((index) => index !== primaryIndex)])
+        ).slice(0, 2);
+
+        const ranks = uniqueIndices.map((idx) => getRank(idx));
+        if (ranks.some((rank) => !Number.isFinite(rank))) {
+          return {};
+        }
+
+        const maxRank = Math.max(...ranks);
+        const pickupIndices = topOrder.filter((originalIndex) => {
+          const rank = getRank(originalIndex);
+          return rank <= maxRank;
+        });
+
+        if (pickupIndices.length === 0) {
+          return {};
+        }
+
+        const pickupIds = pickupIndices.map(
+          (originalIndex) => discardEntries[originalIndex].card.id
+        );
+        const uniqueMeldIds = uniqueIndices.map(
+          (originalIndex) => discardEntries[originalIndex].card.id
+        );
+
+        const discardSelectionCount = uniqueMeldIds.length;
+        const discardPickupCount = pickupIds.length;
+        const requiredHandCardsForSelectedDiscard = Math.max(
           0,
           3 - discardSelectionCount
-        ),
-        isDiscardMeld: Boolean(cardId),
-        selectedDiscardPickupCardIds: selectedPickupCardIds,
-        selectedDiscardMeldCardIds: selectedMeldCardIds,
+        );
+
+        const highlightRange = {
+          start: Math.min(...pickupIndices),
+          end: Math.max(...pickupIndices),
+        };
+
+        const nextContext: TurnActionContext = {
+          ...state.turnActionState.context,
+          allowDrawFromDiscard: discardEntries.length > 0,
+          discardSelectionCount,
+          discardPickupCount,
+          requiredHandCardsForSelectedDiscard,
+          remainingHandCardsNeeded: requiredHandCardsForSelectedDiscard,
+          totalMeldSelectionCount: discardSelectionCount,
+          remainingCardsNeededForMeld: Math.max(0, 3 - discardSelectionCount),
+          isDiscardMeld: true,
+          selectedDiscardPickupCardIds: pickupIds,
+          selectedDiscardMeldCardIds: uniqueMeldIds,
+          discardHighlightRange: highlightRange,
+        };
+
+        console.log(
+          "[selectDiscardCard] pickupIds=%o meldIds=%o",
+          pickupIds,
+          uniqueMeldIds
+        );
+
+        return {
+          selectedDiscardCardId: primaryEntry.card.id,
+          selectedDiscardPickupCardIds: pickupIds,
+          selectedDiscardMeldCardIds: uniqueMeldIds,
+          pendingMeldCardIds: options?.resetPending ? [] : state.pendingMeldCardIds,
+          isSelectingMeld: true,
+          turnActionState: {
+            mode: "assembling_discard_meld",
+            allowedActions: [
+              "select_discard_card",
+              "toggle_meld_card",
+              "confirm_meld",
+              "draw_from_discard",
+              "cancel_selection",
+            ],
+            context: nextContext,
+          },
+        };
       };
 
-      if (!cardId) {
+      const resetSelection = (): Partial<GameStore> => {
         const mode: TurnActionMode = state.hasDrawnThisTurn
           ? "awaiting_discard"
           : "awaiting_draw";
@@ -808,7 +888,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             mode,
             allowedActions,
             context: {
-              ...nextContext,
+              ...state.turnActionState.context,
+              allowDrawFromDiscard: discardEntries.length > 0,
               isDiscardMeld: false,
               discardSelectionCount: 0,
               discardPickupCount: 0,
@@ -818,53 +899,81 @@ export const useGameStore = create<GameStore>((set, get) => ({
               remainingCardsNeededForMeld: 3,
               selectedDiscardPickupCardIds: [],
               selectedDiscardMeldCardIds: [],
+              discardHighlightRange: null,
             },
           },
         };
+      };
+
+      if (!cardId) {
+        return resetSelection();
       }
 
-      return {
-        selectedDiscardCardId: cardId,
-        selectedDiscardPickupCardIds: selectedPickupCardIds,
-        selectedDiscardMeldCardIds: selectedMeldCardIds,
-        pendingMeldCardIds: [],
-        isSelectingMeld: Boolean(cardId),
-        turnActionState: cardId
-          ? {
-              mode: "assembling_discard_meld",
-              allowedActions: [
-                "select_discard_card",
-                "toggle_meld_card",
-                "confirm_meld",
-                "draw_from_discard",
-                "cancel_selection",
-              ],
-              context: nextContext,
-            }
-          : {
-              mode: state.hasDrawnThisTurn ? "awaiting_discard" : "awaiting_draw",
-              allowedActions: state.hasDrawnThisTurn
-                ? [
-                    "select_hand_card",
-                    "discard_card",
-                    "start_meld_selection",
-                    "start_layoff_selection",
-                  ]
-                : [
-                    "draw_from_deck",
-                    "draw_from_discard",
-                    "select_discard_card",
-                    "start_meld_selection",
-                  ],
-              context: {
-                ...nextContext,
-                isDiscardMeld: false,
-                discardPickupCount: 0,
-                selectedDiscardPickupCardIds: [],
-                selectedDiscardMeldCardIds: [],
-              },
-            },
-      };
+      const clickedIndex = findIndex(cardId);
+      if (clickedIndex < 0) {
+        return {};
+      }
+
+      const currentPrimaryId = state.selectedDiscardCardId;
+      const secondaryId = state.selectedDiscardMeldCardIds.find(
+        (id) => id !== currentPrimaryId
+      );
+      const clickedRank = getRank(clickedIndex);
+
+      if (!currentPrimaryId) {
+        if (!Number.isFinite(clickedRank)) {
+          return {};
+        }
+
+        return buildSelectionStateFromIndices(clickedIndex, [clickedIndex], {
+          resetPending: true,
+        });
+      }
+
+      if (cardId === currentPrimaryId) {
+        return resetSelection();
+      }
+
+      const primaryIndex = findIndex(currentPrimaryId);
+      if (primaryIndex < 0) {
+        if (!Number.isFinite(clickedRank)) {
+          return {};
+        }
+        return buildSelectionStateFromIndices(clickedIndex, [clickedIndex], {
+          resetPending: true,
+        });
+      }
+
+      const primaryRank = getRank(primaryIndex);
+      if (!Number.isFinite(primaryRank)) {
+        return {};
+      }
+
+      if (secondaryId && cardId === secondaryId) {
+        return buildSelectionStateFromIndices(primaryIndex, [primaryIndex], {
+          resetPending: false,
+        });
+      }
+
+      if (secondaryId) {
+        // มีการเลือกใบที่สองแล้ว ไม่อนุญาตให้เลือกใบอื่นจนกว่าจะยกเลิก
+        return {};
+      }
+
+      if (!Number.isFinite(clickedRank)) {
+        return {};
+      }
+
+      // หากเลือกไพ่ที่อยู่ลึกกว่าของเดิม ให้เริ่มชุดใหม่
+      if (clickedRank > primaryRank) {
+        return buildSelectionStateFromIndices(clickedIndex, [clickedIndex], {
+          resetPending: true,
+        });
+      }
+
+      return buildSelectionStateFromIndices(primaryIndex, [primaryIndex, clickedIndex], {
+        resetPending: false,
+      });
     });
   },
 
@@ -2075,23 +2184,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? "awaiting_discard"
         : "awaiting_draw";
 
-      const nextAllowedActions: TurnActionPermission[] = hasPending
-        ? ["toggle_meld_card", "confirm_meld", "cancel_selection"]
-        : isDiscardMeld
-        ? ["select_discard_card", "start_meld_selection", "cancel_selection"]
-        : state.hasDrawnThisTurn
-        ? [
-            "select_hand_card",
-            "discard_card",
-            "start_meld_selection",
-            "start_layoff_selection",
-          ]
-        : [
-            "draw_from_deck",
-            "draw_from_discard",
-            "select_discard_card",
-            "start_meld_selection",
-          ];
+      let nextAllowedActions: TurnActionPermission[];
+      if (hasPending) {
+        nextAllowedActions = [
+          "toggle_meld_card",
+          "confirm_meld",
+          "cancel_selection",
+        ];
+        if (isDiscardMeld) {
+          nextAllowedActions.push("draw_from_discard");
+        }
+      } else if (isDiscardMeld) {
+        nextAllowedActions = [
+          "select_discard_card",
+          "start_meld_selection",
+          "cancel_selection",
+          "draw_from_discard",
+        ];
+      } else if (state.hasDrawnThisTurn) {
+        nextAllowedActions = [
+          "select_hand_card",
+          "discard_card",
+          "start_meld_selection",
+          "start_layoff_selection",
+        ];
+      } else {
+        nextAllowedActions = [
+          "draw_from_deck",
+          "draw_from_discard",
+          "select_discard_card",
+          "start_meld_selection",
+        ];
+      }
 
       return {
         pendingMeldCardIds,

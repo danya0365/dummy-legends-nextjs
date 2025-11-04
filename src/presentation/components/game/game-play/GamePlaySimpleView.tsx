@@ -29,6 +29,8 @@ export function GamePlaySimpleView({
   hasDrawn,
   selectedCardId,
   selectedDiscardCardId,
+  selectedDiscardPickupCardIds,
+  selectedDiscardMeldCardIds,
   remainingSeconds,
   formattedRemaining,
   timerPercentage,
@@ -57,6 +59,7 @@ export function GamePlaySimpleView({
   currentTurnPlayerName,
   turnActionMode,
   actionAvailability,
+  isDiscardMeldFlow,
   turnActionContext: _turnActionContext,
   onBack,
   onDrawFromDeck,
@@ -81,10 +84,9 @@ export function GamePlaySimpleView({
   const availableLayoffTargets = myMelds.length + tableMelds.length;
   const opponentMeldCount = communityMelds.length;
   const isAwaitingDrawPhase = turnActionMode === "awaiting_draw";
-  const isDiscardMeldFlow =
-    turnActionMode === "selecting_discard_meld" ||
-    turnActionMode === "assembling_discard_meld";
   const isDiscardAssistActive = discardSelectionCount > 0 || isDiscardMeldFlow;
+  const highlightedDiscardCardIds = selectedDiscardPickupCardIds;
+
   const shouldDisableMeldMode =
     !actionAvailability.canStartMeldSelection ||
     isLoading ||
@@ -297,6 +299,8 @@ export function GamePlaySimpleView({
                 <DiscardStack
                   stack={discardStack}
                   selectedCardId={selectedDiscardCardId}
+                  highlightedCardIds={highlightedDiscardCardIds}
+                  meldCardIds={selectedDiscardMeldCardIds}
                   onSelectCard={onSelectDiscardCard}
                   onDrawFromDiscard={() => {}}
                   drawButtonLabel=""
@@ -396,7 +400,14 @@ export function GamePlaySimpleView({
               ไพ่ของคุณ ({myHand.length} ใบ)
             </h3>
             <div className="flex flex-wrap items-center gap-2">
-              {isSelectingMeld ? (
+              {isDiscardMeldFlow ? (
+                isSelectingMeld ? (
+                  <div className="px-4 py-2 text-xs text-indigo-600 dark:text-indigo-300 rounded-lg bg-indigo-50/70 dark:bg-indigo-500/10">
+                    เลือกไพ่ในมือให้ครบตามเงื่อนไข แล้วกดปุ่ม &quot;หยิบจากกองเพื่อเกิด&quot;
+                    เพื่อยืนยัน
+                  </div>
+                ) : null
+              ) : isSelectingMeld ? (
                 <>
                   <button
                     onClick={onCancelMeldSelection}
@@ -425,16 +436,8 @@ export function GamePlaySimpleView({
                   disabled={shouldDisableMeldMode}
                 >
                   <Sparkles className="h-4 w-4" />
-                  {isDiscardMeldFlow ? "เลือกไพ่ในมือ" : "โหมดเกิดไพ่"}
+                  โหมดเกิดไพ่
                 </button>
-              )}
-
-              {isDiscardMeldFlow && !isSelectingMeld && (
-                <p className="text-xs text-indigo-600 dark:text-indigo-300">
-                  ต้องเลือกไพ่ในมือ{" "}
-                  {Math.max(requiredHandCardsForSelectedDiscard, 1)}{" "}
-                  ใบเพื่อผสมกับกองทิ้ง
-                </p>
               )}
 
               {isSelectingLayoff ? (

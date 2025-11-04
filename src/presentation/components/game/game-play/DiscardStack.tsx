@@ -8,6 +8,8 @@ import { PlayingCard } from "../PlayingCard";
 interface DiscardStackProps {
   stack: DiscardStackInfo | null;
   selectedCardId: string | null;
+  highlightedCardIds?: string[];
+  meldCardIds?: string[];
   onSelectCard: (cardId: string) => void;
   onDrawFromDiscard?: () => void;
   drawButtonLabel?: string;
@@ -22,6 +24,8 @@ interface DiscardStackProps {
 export function DiscardStack({
   stack,
   selectedCardId,
+  highlightedCardIds,
+  meldCardIds,
   onSelectCard,
   onDrawFromDiscard,
   drawButtonLabel,
@@ -33,6 +37,11 @@ export function DiscardStack({
   listClassName,
 }: DiscardStackProps) {
   const cards = useMemo(() => stack?.entries ?? [], [stack?.entries]);
+  const highlightSet = useMemo(
+    () => new Set(highlightedCardIds ?? []),
+    [highlightedCardIds]
+  );
+  const meldSet = useMemo(() => new Set(meldCardIds ?? []), [meldCardIds]);
 
   const { cardSpacing, stackHeight } = useMemo(() => {
     const overlapMap: Record<typeof cardSize, number> = {
@@ -80,13 +89,27 @@ export function DiscardStack({
           </div>
         ) : (
           displayCards.map(({ entry, index }) => {
-            const isSelected = entry.card.id === selectedCardId;
+            const isPrimary = entry.card.id === selectedCardId;
+            const isMeldSelected = meldSet.has(entry.card.id);
+            const isHighlighted = highlightSet.has(entry.card.id);
+            const isSelected = isPrimary || isMeldSelected;
             const isDisabled =
               disableSelection || isLoading || !entry.canSelect;
             const handleClick = () => {
               if (isDisabled) return;
               onSelectCard(entry.card.id);
             };
+
+            const statusLabel = isPrimary
+              ? "ใบหลัก"
+              : isMeldSelected
+              ? "เพิ่มเพื่อเกิด"
+              : "พร้อมหยิบ";
+            const highlightMode = isSelected
+              ? "glow"
+              : isHighlighted
+              ? "pulse"
+              : "none";
 
             return (
               <div
@@ -103,9 +126,9 @@ export function DiscardStack({
                   onClick={handleClick}
                   disabled={isDisabled}
                   selected={isSelected}
-                  highlight={isSelected ? "glow" : "none"}
+                  highlight={highlightMode}
                   showStatusBadge={isSelected}
-                  statusLabel="เลือกอยู่"
+                  statusLabel={statusLabel}
                   showHeadBadge
                 />
               </div>

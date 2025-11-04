@@ -83,6 +83,7 @@ export interface TurnActionContext {
   minimumHandCardsRequiredForMeld?: number;
   selectedDiscardPickupCardIds?: string[];
   selectedDiscardMeldCardIds?: string[];
+  discardHighlightRange?: { start: number; end: number } | null;
 }
 
 export interface TurnActionState {

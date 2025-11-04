@@ -56,6 +56,8 @@ export function useGamePlayController({
     isSelectingLayoff,
     targetMeldId,
     selectedDiscardCardId,
+    selectedDiscardPickupCardIds,
+    selectedDiscardMeldCardIds,
     selectDiscardCard,
     unsubscribeFromGame,
     isLoading,
@@ -75,6 +77,8 @@ export function useGamePlayController({
   const discardSelectionCount =
     turnActionState.context.discardSelectionCount ?? 0;
   const discardPickupCount = turnActionState.context.discardPickupCount ?? 0;
+  const discardHighlightRange =
+    turnActionState.context.discardHighlightRange ?? null;
   const totalMeldSelectionCount =
     turnActionState.context.totalMeldSelectionCount ??
     pendingMeldCardIds.length + discardSelectionCount;
@@ -295,24 +299,12 @@ export function useGamePlayController({
   }, [sessionId, loadGameState, subscribeToGameSession, unsubscribeFromGame]);
 
   const selectedDiscardEntries = useMemo(() => {
-    if (!discardStack || !selectedDiscardCardId) {
-      return [] as DiscardStackEntry[];
-    }
+    if (!discardStack) return [] as DiscardStackEntry[];
+    const idSet = new Set(selectedDiscardPickupCardIds);
+    if (idSet.size === 0) return [] as DiscardStackEntry[];
 
-    const selectedEntry = discardStack.entries.find(
-      (entry) => entry.card.id === selectedDiscardCardId
-    );
-
-    if (!selectedEntry) {
-      return [] as DiscardStackEntry[];
-    }
-
-    const targetPosition = selectedEntry.card.position;
-
-    return discardStack.entries.filter(
-      (entry) => entry.card.position <= targetPosition
-    );
-  }, [discardStack, selectedDiscardCardId]);
+    return discardStack.entries.filter((entry) => idSet.has(entry.card.id));
+  }, [discardStack, selectedDiscardPickupCardIds]);
 
   useEffect(() => {
     if (!isSelectingMeld || isSelectingLayoff) {
@@ -390,9 +382,10 @@ export function useGamePlayController({
         return;
       }
 
-      const requiredDiscardCards = selectedDiscardEntries.map(
-        (entry) => entry.card.id
-      );
+      const requiredDiscardCards =
+        selectedDiscardMeldCardIds.length > 0
+          ? selectedDiscardMeldCardIds
+          : selectedDiscardEntries.map((entry) => entry.card.id);
 
       const combinedSelectionCount =
         pendingMeldCardIds.length + requiredDiscardCards.length;
@@ -426,6 +419,7 @@ export function useGamePlayController({
     requiredHandCardsForSelectedDiscard,
     selectedDiscardCardId,
     selectedDiscardEntries,
+    selectedDiscardMeldCardIds,
     startMeldSelection,
   ]);
 
@@ -663,6 +657,9 @@ export function useGamePlayController({
     pendingMeldSet,
     discardSelectionCount,
     discardPickupCount,
+    selectedDiscardPickupCardIds,
+    selectedDiscardMeldCardIds,
+    discardHighlightRange,
     totalMeldSelectionCount,
     remainingCardsNeededForMeld,
     requiredHandCardsForSelectedDiscard,

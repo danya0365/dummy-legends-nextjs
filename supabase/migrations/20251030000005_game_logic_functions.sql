@@ -1324,6 +1324,7 @@ DECLARE
   v_cards_collected_count INTEGER := 0;
   v_target_position INTEGER;
   v_card_to_collect UUID;
+  rec_discard_card RECORD;
 BEGIN
   IF p_meld_cards IS NULL OR array_length(p_meld_cards, 1) < 3 THEN
     RAISE EXCEPTION 'Meld requires at least three cards (including discard)';
@@ -1417,13 +1418,19 @@ BEGIN
     RAISE EXCEPTION 'Selected discard card is no longer available';
   END IF;
 
-  SELECT array_agg(id ORDER BY position_in_location)
-  INTO v_cards_to_collect
-  FROM public.game_cards
-  WHERE session_id = p_session_id
-    AND location = 'discard'
-    AND position_in_location <= v_target_position
-  FOR UPDATE;
+  v_cards_to_collect := ARRAY[]::UUID[];
+
+  FOR rec_discard_card IN
+    SELECT id
+    FROM public.game_cards
+    WHERE session_id = p_session_id
+      AND location = 'discard'
+      AND position_in_location <= v_target_position
+    ORDER BY position_in_location
+    FOR UPDATE
+  LOOP
+    v_cards_to_collect := array_append(v_cards_to_collect, rec_discard_card.id);
+  END LOOP;
 
   v_cards_collected_count := COALESCE(array_length(v_cards_to_collect, 1), 0);
 

@@ -40,6 +40,8 @@ export function GamePlayPortrait({
   hasDrawn: _hasDrawn,
   selectedCardId,
   selectedDiscardCardId,
+  selectedDiscardPickupCardIds,
+  selectedDiscardMeldCardIds,
   remainingSeconds,
   formattedRemaining,
   timerPercentage,
@@ -79,6 +81,7 @@ export function GamePlayPortrait({
   onSelectLayoffTarget,
   onDiscard,
   onRefresh,
+  isDiscardMeldFlow,
 }: GamePlayLayoutProps) {
   void _hasDrawn;
   const [activePanel, setActivePanel] = useState<
@@ -302,6 +305,8 @@ export function GamePlayPortrait({
             <DiscardStack
               stack={discardStack}
               selectedCardId={selectedDiscardCardId}
+              highlightedCardIds={selectedDiscardPickupCardIds}
+              meldCardIds={selectedDiscardMeldCardIds}
               onSelectCard={onSelectDiscardCard}
               onDrawFromDiscard={onDrawFromDiscard}
               drawButtonLabel="เก็บกองทิ้ง"
@@ -348,7 +353,7 @@ export function GamePlayPortrait({
       <footer className="relative z-20 mt-auto w-full bg-white/90 px-5 pb-6 pt-4 text-gray-800 shadow-[0_-8px_30px_rgba(0,0,0,0.1)] backdrop-blur-md dark:bg-slate-900/80 dark:text-gray-100">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            {isSelectingMeld ? (
+            {isDiscardMeldFlow ? null : isSelectingMeld ? (
               <>
                 <button
                   type="button"
