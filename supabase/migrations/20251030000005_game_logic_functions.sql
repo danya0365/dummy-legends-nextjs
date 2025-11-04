@@ -470,9 +470,10 @@ BEGIN
   UPDATE public.game_hands
   SET card_count = card_count + 1,
       updated_at = NOW()
-  WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
+  WHERE session_id = p_session_id
+    AND gamer_id = p_gamer_id;
 
-  -- Record move
+  -- บันทึกการจั่วไพ่จากกองหลักลงประวัติการเล่น
   INSERT INTO public.game_moves (
     session_id,
     gamer_id,
@@ -523,7 +524,10 @@ DECLARE
   v_last_move_type public.game_move_type;
   v_last_move_data JSONB;
   v_last_move_created_at TIMESTAMP;
+  v_last_draw_discard_card UUID;
+  v_last_draw_card_still_in_hand BOOLEAN := false;
 BEGIN
+  -- ตรวจสอบว่ามีไพ่ครบอย่างน้อย 3 ใบและเป็นไพ่ไม่ซ้ำกัน
   IF p_meld_cards IS NULL OR array_length(p_meld_cards, 1) < 3 THEN
     RAISE EXCEPTION 'Meld requires at least three cards';
   END IF;
@@ -537,6 +541,7 @@ BEGIN
 
   v_meld_type := public.validate_dummy_meld(p_session_id, p_meld_cards)::public.meld_type;
 
+  -- ตรวจสิทธิ์ผู้เล่นและยืนยันว่าเป็นตาของตัวเอง
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
   IF NOT v_can_access THEN
     RAISE EXCEPTION 'Not authorized';
@@ -560,6 +565,7 @@ BEGIN
     RAISE EXCEPTION 'All meld cards must be in your hand';
   END IF;
 
+  -- ตรวจสอบ move ล่าสุดว่าจั่วมาจริงและกรณีจั่วกองทิ้งต้องใช้ไพ่ใบที่หยิบ
   SELECT
     gm.move_type,
     gm.move_data,
@@ -579,11 +585,21 @@ BEGIN
       RAISE EXCEPTION 'Invalid draw_discard move data';
     END IF;
 
-    IF NOT ((v_last_move_data ->> 'card_id')::uuid = ANY(p_meld_cards)) THEN
+    v_last_draw_discard_card := (v_last_move_data ->> 'card_id')::uuid;
+
+    SELECT owner_gamer_id = p_gamer_id AND location = 'hand'
+    INTO v_last_draw_card_still_in_hand
+    FROM public.game_cards
+    WHERE id = v_last_draw_discard_card
+      AND session_id = p_session_id;
+
+    IF COALESCE(v_last_draw_card_still_in_hand, false)
+       AND NOT (v_last_draw_discard_card = ANY(p_meld_cards)) THEN
       RAISE EXCEPTION 'Discard card drawn must be part of meld';
     END IF;
   END IF;
 
+  -- สรุปข้อมูลชุดเกิด (head, spe-to, คะแนน)
   SELECT
     COALESCE(BOOL_OR(is_head), false),
     COALESCE(BOOL_OR(is_speto), false),
@@ -594,6 +610,7 @@ BEGIN
   WHERE session_id = p_session_id
     AND id = ANY(p_meld_cards);
 
+  -- สร้าง meld ใหม่พร้อม metadata เก็บข้อมูลไพ่/spe-to
   INSERT INTO public.game_melds (
     id,
     session_id,
@@ -619,6 +636,7 @@ BEGIN
     NOW()
   );
 
+  -- ย้ายไพ่จากมือไปผูกกับ meld พร้อมจัดลำดับใหม่
   WITH card_input AS (
     SELECT card_id, ord - 1 AS card_index
     FROM unnest(p_meld_cards) WITH ORDINALITY AS t(card_id, ord)
@@ -646,6 +664,7 @@ BEGIN
       updated_at = NOW()
   WHERE session_id = p_session_id AND gamer_id = p_gamer_id;
 
+  -- บันทึก event คะแนนจากการเกิด พร้อมโบนัสต่าง ๆ
   SELECT card_count
   INTO v_card_count
   FROM public.game_hands
@@ -711,6 +730,7 @@ BEGIN
     );
   END IF;
 
+  -- ถ้าเหลือไพ่ใบเดียวหลังเกิด ให้บังคับทิ้งลงกองและจัดลำดับกองทิ้งใหม่
   IF v_card_count = 1 THEN
     SELECT id
     INTO v_remaining_card
@@ -1326,6 +1346,7 @@ DECLARE
   v_card_to_collect UUID;
   rec_discard_card RECORD;
 BEGIN
+  -- ตรวจสอบว่ามีไพ่ครบตามเงื่อนไข (อย่างน้อย 3 ใบรวมไพ่กองทิ้ง)
   IF p_meld_cards IS NULL OR array_length(p_meld_cards, 1) < 3 THEN
     RAISE EXCEPTION 'Meld requires at least three cards (including discard)';
   END IF;
@@ -1337,9 +1358,10 @@ BEGIN
     RAISE EXCEPTION 'Meld cards must be unique';
   END IF;
 
+  -- ตรวจสอบรูปแบบ meld ตามกติกา (set/run)
   v_meld_type := public.validate_dummy_meld(p_session_id, p_meld_cards)::public.meld_type;
 
-  -- Check access
+  -- ตรวจสิทธิ์ผู้เล่นและ lock แถว session เพื่อกัน race condition
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
   IF NOT v_can_access THEN
     RAISE EXCEPTION 'Not authorized';
@@ -1356,7 +1378,7 @@ BEGIN
     RAISE EXCEPTION 'Not your turn';
   END IF;
 
-  -- Get current hand count
+  -- เก็บจำนวนไพ่ในมือปัจจุบันไว้คำนวณตำแหน่งเมื่อต้องย้ายกองทิ้งขึ้นมือ
   SELECT card_count INTO v_hand_count
   FROM public.game_hands
   WHERE session_id = p_session_id AND gamer_id = p_gamer_id
@@ -1368,7 +1390,7 @@ BEGIN
   --
   -- Commented out hand count check to allow drawing from discard when hand is full
 
-  -- Determine which discard card is being selected and lock session row
+  -- ระบุไพ่กองทิ้งที่ผู้เล่นเลือก (อนุญาตให้เลือกใบใดก็ได้ในกอง)
   SELECT discard_pile_top_card_id INTO v_selected_discard_card_id
   FROM public.game_sessions
   WHERE id = p_session_id
@@ -1382,7 +1404,7 @@ BEGIN
     RAISE EXCEPTION 'Discard pile is empty';
   END IF;
 
-  -- Ensure player holds remaining meld cards in hand and selected discard card is valid
+  -- ยืนยันว่าไพ่ทั้งหมดสร้าง meld ได้จริง (ไพ่กองทิ้งต้องเป็นใบที่เลือกและไพ่ที่เหลือต้องอยู่ในมือผู้เล่น)
   IF EXISTS (
     SELECT 1
     FROM unnest(p_meld_cards) AS meld_card
@@ -1400,12 +1422,12 @@ BEGIN
     RAISE EXCEPTION 'Meld contains cards not accessible to player';
   END IF;
 
-  -- Ensure selected discard card is part of meld requirement
+  -- ป้องกันการเลือกไพ่กองทิ้งที่ไม่ได้รวมอยู่ใน meld
   IF NOT (v_selected_discard_card_id = ANY(p_meld_cards)) THEN
     RAISE EXCEPTION 'Selected discard card must be included in meld';
   END IF;
 
-  -- Determine all discard cards that must be collected (target card + all on top)
+  -- หาตำแหน่งไพ่ในกองทิ้งและรวบรวมไพ่ทั้งหมดตั้งแต่ใบที่เลือกขึ้นไปด้านบน
   SELECT position_in_location
   INTO v_target_position
   FROM public.game_cards
@@ -1442,7 +1464,7 @@ BEGIN
     RAISE EXCEPTION 'Selected discard card not in discard stack';
   END IF;
 
-  -- Move required discard stack to player's hand (preserving order)
+  -- ย้ายกองทิ้งที่ต้องเก็บเข้าสู่มือ พร้อมรักษาลำดับตามกองเดิม
   FOR i IN 1..v_cards_collected_count LOOP
     v_card_to_collect := v_cards_to_collect[i];
 
@@ -1455,7 +1477,7 @@ BEGIN
       AND session_id = p_session_id;
   END LOOP;
 
-  -- Update hand count after drawing discard stack
+  -- ปรับจำนวนไพ่ในมือหลังเก็บกองทิ้ง
   UPDATE public.game_hands
   SET card_count = card_count + v_cards_collected_count,
       updated_at = NOW()
