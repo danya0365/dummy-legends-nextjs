@@ -1620,6 +1620,7 @@ BEGIN
     'draw_discard',
     (SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id),
     jsonb_build_object(
+      'card_id', v_selected_discard_card_id,
       'selected_discard_card_id', v_selected_discard_card_id,
       'collected_discard_cards', v_cards_to_collect,
       'meld_id', v_meld_id,
