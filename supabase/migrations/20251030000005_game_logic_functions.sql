@@ -1673,6 +1673,7 @@ DECLARE
   v_deadwood_count INTEGER;
   v_winning_type public.game_move_type;
   v_finish_result UUID;
+  v_new_discard_position INTEGER;
 BEGIN
   -- Check access
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
@@ -1699,11 +1700,18 @@ BEGIN
     RAISE EXCEPTION 'Card not in your hand';
   END IF;
   
-  -- Move card to discard pile
+  -- คำนวณตำแหน่งใหม่บนกองทิ้ง (ต่อจากใบบนสุดเดิม)
+  SELECT COALESCE(MAX(position_in_location), -1) + 1
+  INTO v_new_discard_position
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND location = 'discard';
+
+  -- Move card to discard pile พร้อมตั้งตำแหน่งเป็นใบบนสุดใหม่
   UPDATE public.game_cards
   SET location = 'discard',
       owner_gamer_id = NULL,
-      position_in_location = 0
+      position_in_location = v_new_discard_position
   WHERE id = p_card_id;
   
   -- Update session discard pile top
