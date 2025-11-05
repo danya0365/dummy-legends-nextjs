@@ -1820,6 +1820,15 @@ DECLARE
   v_deadwood_value_player INTEGER;
   v_deadwood_cards_json JSONB;
   v_deadwood_card_ids UUID[];
+  v_has_revealed_cards BOOLEAN := false;
+  v_winner_total_card_count INTEGER := 0;
+  v_winner_total_suit_count INTEGER := 0;
+  v_is_dark_knock BOOLEAN := false;
+  v_is_color_knock BOOLEAN := false;
+  v_is_dark_color_knock BOOLEAN := false;
+  v_knock_multiplier INTEGER := 1;
+  v_knock_extra_points INTEGER := 0;
+  v_winner_total_before_multiplier INTEGER := 0;
 BEGIN
   IF p_winning_type IS NULL THEN
     RAISE EXCEPTION 'Winning type is required';
@@ -1876,6 +1885,38 @@ BEGIN
   END IF;
 
   v_session_scores := public.compute_thai_dummy_scores(p_session_id);
+
+  SELECT EXISTS (
+           SELECT 1
+           FROM public.game_melds gm
+           WHERE gm.session_id = p_session_id
+             AND gm.gamer_id = p_gamer_id
+         )
+  INTO v_has_revealed_cards;
+
+  IF NOT v_has_revealed_cards THEN
+    SELECT EXISTS (
+             SELECT 1
+             FROM public.game_score_events gse
+             WHERE gse.session_id = p_session_id
+               AND gse.gamer_id = p_gamer_id
+               AND gse.event_type IN ('meld_points', 'head_bonus', 'spe_to_meld_bonus', 'spe_to_deposit_bonus')
+           )
+    INTO v_has_revealed_cards;
+  END IF;
+
+  SELECT
+    COALESCE(COUNT(*), 0),
+    COALESCE(COUNT(DISTINCT suit), 0)
+  INTO v_winner_total_card_count, v_winner_total_suit_count
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND owner_gamer_id = p_gamer_id
+    AND location IN ('hand', 'meld');
+
+  v_is_dark_knock := NOT v_has_revealed_cards;
+  v_is_color_knock := v_winner_total_card_count > 0 AND v_winner_total_suit_count = 1;
+  v_is_dark_color_knock := v_is_dark_knock AND v_is_color_knock;
 
   WITH player_deadwood AS (
     SELECT
@@ -1969,6 +2010,87 @@ BEGIN
   FROM public.game_score_events
   WHERE session_id = p_session_id
     AND gamer_id = p_gamer_id;
+
+  v_winner_total_before_multiplier := v_winner_score;
+
+  IF v_is_dark_color_knock THEN
+    v_knock_multiplier := 4;
+  ELSIF v_is_dark_knock OR v_is_color_knock THEN
+    v_knock_multiplier := 2;
+  ELSE
+    v_knock_multiplier := 1;
+  END IF;
+
+  IF v_knock_multiplier > 1 AND v_winner_total_before_multiplier > 0 THEN
+    v_knock_extra_points := v_winner_total_before_multiplier * (v_knock_multiplier - 1);
+
+    IF v_is_dark_color_knock THEN
+      INSERT INTO public.game_score_events (
+        session_id,
+        gamer_id,
+        event_type,
+        points,
+        related_meld_id,
+        related_card_ids,
+        metadata
+      ) VALUES (
+        p_session_id,
+        p_gamer_id,
+        'dark_color_knock_bonus',
+        v_knock_extra_points,
+        NULL,
+        '{}',
+        jsonb_build_object(
+          'base_score', v_winner_total_before_multiplier,
+          'multiplier', v_knock_multiplier
+        )
+      );
+    ELSIF v_is_dark_knock THEN
+      INSERT INTO public.game_score_events (
+        session_id,
+        gamer_id,
+        event_type,
+        points,
+        related_meld_id,
+        related_card_ids,
+        metadata
+      ) VALUES (
+        p_session_id,
+        p_gamer_id,
+        'dark_knock_bonus',
+        v_knock_extra_points,
+        NULL,
+        '{}',
+        jsonb_build_object(
+          'base_score', v_winner_total_before_multiplier,
+          'multiplier', v_knock_multiplier
+        )
+      );
+    ELSE
+      INSERT INTO public.game_score_events (
+        session_id,
+        gamer_id,
+        event_type,
+        points,
+        related_meld_id,
+        related_card_ids,
+        metadata
+      ) VALUES (
+        p_session_id,
+        p_gamer_id,
+        'color_knock_bonus',
+        v_knock_extra_points,
+        NULL,
+        '{}',
+        jsonb_build_object(
+          'base_score', v_winner_total_before_multiplier,
+          'multiplier', v_knock_multiplier
+        )
+      );
+    END IF;
+
+    v_winner_score := v_winner_score + v_knock_extra_points;
+  END IF;
 
   v_move_number := (
     SELECT COUNT(*) + 1 FROM public.game_moves WHERE session_id = p_session_id
