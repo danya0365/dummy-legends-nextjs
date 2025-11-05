@@ -7,7 +7,10 @@ import type {
   TurnActionPermission,
 } from "@/src/domain/types/gameplay.types";
 import { useGameStore } from "@/src/stores/gameStore";
-import type { GamePlayLayoutProps, GamePlayViewTheme } from "../game-play/types";
+import type {
+  GamePlayLayoutProps,
+  GamePlayViewTheme,
+} from "../game-play/types";
 import { GamePlayViewTheme as GamePlayViewThemeEnum } from "../game-play/types";
 
 interface UseGamePlayControllerArgs {
@@ -87,14 +90,18 @@ export function useGamePlayController({
     Math.max(0, 3 - discardSelectionCount);
   const remainingHandCardsNeeded =
     turnActionState.context.remainingHandCardsNeeded ??
-    Math.max(0, requiredHandCardsForSelectedDiscard - pendingMeldCardIds.length);
+    Math.max(
+      0,
+      requiredHandCardsForSelectedDiscard - pendingMeldCardIds.length
+    );
   const remainingCardsNeededForMeld =
     turnActionState.context.remainingCardsNeededForMeld ??
     Math.max(0, 3 - totalMeldSelectionCount);
   const isDiscardMeldFlow = Boolean(turnActionState.context.isDiscardMeld);
   const canConfirmMeld =
     totalMeldSelectionCount >= 3 &&
-    pendingMeldCardIds.length >= Math.max(1, requiredHandCardsForSelectedDiscard);
+    pendingMeldCardIds.length >=
+      Math.max(1, requiredHandCardsForSelectedDiscard);
   const canConfirmLayoff = pendingLayoffCardIds.length > 0 && !!targetMeldId;
 
   const pendingMeldSet = useMemo(
@@ -170,7 +177,9 @@ export function useGamePlayController({
   const isMyTurn = currentSession?.currentTurnGamerId === gamerId;
 
   const actionAvailability = useMemo(() => {
-    const allowed = new Set<TurnActionPermission>(turnActionState.allowedActions);
+    const allowed = new Set<TurnActionPermission>(
+      turnActionState.allowedActions
+    );
     return {
       canDrawFromDeck: allowed.has("draw_from_deck") && isMyTurn,
       canDrawFromDiscard:
@@ -190,12 +199,15 @@ export function useGamePlayController({
       canCancelSelection: allowed.has("cancel_selection") && isMyTurn,
       canToggleMeldCard: allowed.has("toggle_meld_card") && isMyTurn,
       canConfirmMeldAction: allowed.has("confirm_meld") && isMyTurn,
-      canStartLayoffSelection: allowed.has("start_layoff_selection") && isMyTurn,
+      canStartLayoffSelection:
+        allowed.has("start_layoff_selection") && isMyTurn,
       canToggleLayoffCard: allowed.has("toggle_layoff_card") && isMyTurn,
       canConfirmLayoffAction: allowed.has("confirm_layoff") && isMyTurn,
       canDiscardCard: allowed.has("discard_card") && isMyTurn,
     };
   }, [isMyTurn, turnActionState.allowedActions, turnActionState.context]);
+
+  const { canStartMeldSelection, canStartLayoffSelection } = actionAvailability;
 
   const [orientation, setOrientation] = useState<"portrait" | "landscape">(
     () => {
@@ -428,7 +440,11 @@ export function useGamePlayController({
       if (!actionAvailability.canSelectDiscardCard) return;
       selectDiscardCard(cardId === selectedDiscardCardId ? null : cardId);
     },
-    [actionAvailability.canSelectDiscardCard, selectDiscardCard, selectedDiscardCardId]
+    [
+      actionAvailability.canSelectDiscardCard,
+      selectDiscardCard,
+      selectedDiscardCardId,
+    ]
   );
 
   const handleSelectCard = useCallback(
@@ -452,7 +468,11 @@ export function useGamePlayController({
     cancelLayoffSelection();
     startMeldSelection();
     setGuidanceMessage("เลือกไพ่ในมือเพื่อเตรียมเกิด");
-  }, [actionAvailability.canStartMeldSelection, cancelLayoffSelection, startMeldSelection]);
+  }, [
+    actionAvailability.canStartMeldSelection,
+    cancelLayoffSelection,
+    startMeldSelection,
+  ]);
 
   const handleCancelMeldSelection = useCallback(() => {
     cancelMeldSelection();
@@ -483,15 +503,45 @@ export function useGamePlayController({
       case "selecting_layoff":
         setGuidanceMessage("เลือกไพ่ในมือเพื่อฝากไพ่");
         break;
-      case "awaiting_discard":
-        setGuidanceMessage(
-          selectedCardId ? "กดทิ้งไพ่เพื่อจบเทิร์น" : "เลือกไพ่ที่จะทิ้ง"
-        );
+      case "awaiting_discard": {
+        const hasPendingMeld = pendingMeldCardIds.length > 0;
+        const hasPendingLayoff = pendingLayoffCardIds.length > 0;
+
+        if (isSelectingMeld && canConfirmMeld) {
+          setGuidanceMessage('ครบแล้ว! กดปุ่ม "เกิดไพ่" หรือเลือกไพ่เพิ่มก่อนทิ้งไพ่');
+        } else if (isSelectingLayoff && canConfirmLayoff) {
+          setGuidanceMessage('เลือกกด "ฝากไพ่" เพื่อวางไพ่ หรือทิ้งไพ่เพื่อจบเทิร์น');
+        } else if (hasPendingMeld) {
+          setGuidanceMessage("กดปุ่มเกิดไพ่เพื่อยืนยันชุดที่เลือก หรือทิ้งไพ่เพื่อจบเทิร์น");
+        } else if (hasPendingLayoff) {
+          setGuidanceMessage("เลือกกดฝากไพ่เพื่อวางไพ่ หรือปรับเลือกก่อนทิ้งไพ่");
+        } else if (selectedCardId) {
+          setGuidanceMessage("กดทิ้งไพ่เพื่อจบเทิร์น");
+        } else {
+          setGuidanceMessage(
+            canStartMeldSelection || canStartLayoffSelection
+              ? "เลือกไพ่ที่จะทิ้ง หรือเริ่มเกิด/ฝากไพ่"
+              : "เลือกไพ่ที่จะทิ้ง"
+          );
+        }
         break;
+      }
       default:
         setGuidanceMessage(null);
     }
-  }, [isMyTurn, selectedCardId, turnActionState]);
+  }, [
+    canConfirmLayoff,
+    canConfirmMeld,
+    canStartLayoffSelection,
+    canStartMeldSelection,
+    isMyTurn,
+    isSelectingLayoff,
+    isSelectingMeld,
+    pendingLayoffCardIds.length,
+    pendingMeldCardIds.length,
+    selectedCardId,
+    turnActionState,
+  ]);
 
   useEffect(() => {
     if (!isSelectingLayoff) {
@@ -610,7 +660,9 @@ export function useGamePlayController({
 
     void loadGameResultSummaryForRoom(roomId);
 
-    const query = new URLSearchParams({ sessionId: finishedSessionId }).toString();
+    const query = new URLSearchParams({
+      sessionId: finishedSessionId,
+    }).toString();
     router.push(`/game/room/${roomId}/result?${query}`);
   }, [
     isGameFinished,
