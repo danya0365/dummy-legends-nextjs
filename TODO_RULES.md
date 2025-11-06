@@ -15,8 +15,11 @@
 - ✅ ตรวจและบันทึกโทษทิ้งมี่/ทิ้งปี้หัว/ทิ้งเต็ม @supabase/migrations/20251106000001_discard_penalty_check.sql#1-175 @supabase/migrations/20251030000005_game_logic_functions.sql#1778-1786
 - ✅ ตรวจและบันทึกโทษทิ้งโง่ (ทิ้งแล้วคนถัดไปน็อก) @supabase/migrations/20251030000005_game_logic_functions.sql#1968-2004
 - ✅ ตรวจและบันทึกโทษถูกฝากสเปโต @supabase/migrations/20251030000005_game_logic_functions.sql#1086-1109
-- ⚠️ ยังไม่รองรับลบมืด (ไม่เคยเกิดแล้วโดนน็อก - ต้องคูณแต้มลบ x2)
-- ⚠️ ยังไม่มีระบบจับผิด/เตือนเมื่อทิ้งไพ่ผิดกติกา (ต้องตรวจจากกองที่เกิดได้ทันที)
+- ✅ รองรับลบมืด (ไม่เคยเกิดแล้วโดนน็อก - คูณแต้มลบ x2) @supabase/migrations/20251030000005_game_logic_functions.sql#2055-2100
+- ✅ มีระบบจับผิด/เตือนเมื่อทิ้งไพ่ผิดกติกา @supabase/migrations/20251106000002_validate_discard_rules.sql @src/stores/gameStore.ts#2398-2444
+  - ตรวจสอบไม่ให้ทิ้งไพ่ที่ผู้เล่นถัดไปสามารถเกิดได้ทันที
+  - ตรวจสอบต้องเกิดอย่างน้อย 1 กองก่อนน็อก
+  - รองรับ force discard สำหรับกรณีพิเศษ
 - ✅ คำนวณ multiplier x2/x4 สำหรับรูปแบบน็อกพิเศษในสรุปผลคะแนน @supabase/migrations/20251030000005_game_logic_functions.sql#1998-2083
 - ⚠️ ยังไม่มี UX อธิบายกติกาในเกม (เช่น Tooltip, Rule overlay)
 - ❌ ยังไม่รองรับโหมดกติกา Tournament/Custom หรือปรับแต้มตาม RULES.md ส่วนนี้ยังไม่เริ่ม

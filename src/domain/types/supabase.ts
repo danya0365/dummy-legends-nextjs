@@ -897,6 +897,14 @@ export type Database = {
         Args: { p_gamer_id: string; p_guest_identifier?: string }
         Returns: boolean
       }
+      check_discard_can_meld: {
+        Args: {
+          p_session_id: string
+          p_discarded_card_id: string
+          p_next_gamer_id: string
+        }
+        Returns: boolean
+      }
       compute_thai_dummy_deadwood: {
         Args: { p_session_id: string; p_gamer_id: string }
         Returns: {
@@ -957,6 +965,16 @@ export type Database = {
           p_guest_identifier?: string
         }
         Returns: boolean
+      }
+      discard_card_with_validation: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_card_id: string
+          p_guest_identifier?: string
+          p_force_discard?: boolean
+        }
+        Returns: Json
       }
       draw_card: {
         Args: {
@@ -1207,6 +1225,15 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      record_discard_penalty_if_needed: {
+        Args: {
+          p_session_id: string
+          p_discarder_gamer_id: string
+          p_discarded_card_id: string
+          p_next_gamer_id: string
+        }
+        Returns: undefined
+      }
       set_profile_active: {
         Args: { profile_id: string }
         Returns: boolean
@@ -1257,6 +1284,10 @@ export type Database = {
           p_guest_identifier?: string
         }
         Returns: boolean
+      }
+      validate_discard_card_rules: {
+        Args: { p_session_id: string; p_gamer_id: string; p_card_id: string }
+        Returns: Json
       }
       validate_dummy_meld: {
         Args: { p_session_id: string; p_card_ids: string[] }

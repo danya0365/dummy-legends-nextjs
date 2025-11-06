@@ -2052,28 +2052,52 @@ BEGIN
         );
       END IF;
     ELSE
-      IF v_deadwood_value_player > 0 THEN
-        INSERT INTO public.game_score_events (
-          session_id,
-          gamer_id,
-          event_type,
-          points,
-          related_meld_id,
-          related_card_ids,
-          metadata
-        ) VALUES (
-          p_session_id,
-          v_player_id,
-          'hand_penalty',
-          -v_deadwood_value_player,
-          NULL,
-          v_deadwood_card_ids,
-          jsonb_build_object(
-            'deadwood_cards', v_deadwood_cards_json,
-            'deadwood_value', v_deadwood_value_player
-          )
-        );
-      END IF;
+      -- ตรวจสอบว่าผู้เล่นนี้เคยเกิดหรือไม่ (ลบมืด)
+      DECLARE
+        v_has_melds BOOLEAN := false;
+        v_penalty_multiplier INTEGER := 1;
+        v_final_penalty INTEGER;
+      BEGIN
+        SELECT EXISTS (
+          SELECT 1
+          FROM public.game_melds gm
+          WHERE gm.session_id = p_session_id
+            AND gm.gamer_id = v_player_id
+        )
+        INTO v_has_melds;
+
+        -- ถ้าไม่เคยเกิดเลย = ลบมืด คูณแต้มลบ x2
+        IF NOT v_has_melds THEN
+          v_penalty_multiplier := 2;
+        END IF;
+
+        IF v_deadwood_value_player > 0 THEN
+          v_final_penalty := -v_deadwood_value_player * v_penalty_multiplier;
+
+          INSERT INTO public.game_score_events (
+            session_id,
+            gamer_id,
+            event_type,
+            points,
+            related_meld_id,
+            related_card_ids,
+            metadata
+          ) VALUES (
+            p_session_id,
+            v_player_id,
+            'hand_penalty',
+            v_final_penalty,
+            NULL,
+            v_deadwood_card_ids,
+            jsonb_build_object(
+              'deadwood_cards', v_deadwood_cards_json,
+              'deadwood_value', v_deadwood_value_player,
+              'is_dark_lose', NOT v_has_melds,
+              'penalty_multiplier', v_penalty_multiplier
+            )
+          );
+        END IF;
+      END;
     END IF;
   END LOOP;
 

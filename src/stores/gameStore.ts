@@ -11,6 +11,7 @@ import type {
   RoomStatus,
 } from "@/src/domain/types/game.types";
 import type {
+  DeadwoodCardDetail,
   DiscardStackInfo,
   GameCard,
   GameCardRow,
@@ -33,7 +34,6 @@ import type {
   TurnActionMode,
   TurnActionPermission,
   TurnActionState,
-  DeadwoodCardDetail,
 } from "@/src/domain/types/gameplay.types";
 import type { Json } from "@/src/domain/types/supabase";
 import { supabaseClient as supabase } from "@/src/infrastructure/supabase/client";
@@ -264,6 +264,12 @@ const mapRoomDetailsToGameRoom = (details: RoomDetailsContent): GameRoom => {
   };
 };
 
+interface ValidationError {
+  type: string | null;
+  message: string;
+  canForce?: boolean;
+}
+
 interface GameStore extends RoomState {
   gamerId: string | null;
   guestId: string | null;
@@ -273,6 +279,7 @@ interface GameStore extends RoomState {
   gamerProfileForm: GamerProfileFormState;
   isGamerProfileModalOpen: boolean;
   isSavingGamerProfile: boolean;
+  validationError: ValidationError | null;
 
   // Meld selection state
   pendingMeldCardIds: string[];
@@ -388,6 +395,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isInRoom: false,
   isLoading: false,
   error: null,
+  validationError: null,
   gamerId: null,
   guestId: null,
   roomChannel: null,
@@ -2387,19 +2395,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
   /**
    * Discard a card
    */
-  discardCard: async (cardId: string) => {
+  discardCard: async (cardId: string, forceDiscard = false) => {
     try {
       const { currentSession, gamerId, guestId } = get();
       if (!currentSession || !gamerId) throw new Error("ไม่พบเซสชันเกม");
 
-      const { error } = await supabase.rpc("discard_card", {
+      const { data, error } = await supabase.rpc("discard_card_with_validation", {
         p_session_id: currentSession.id,
         p_gamer_id: gamerId,
         p_card_id: cardId,
         p_guest_identifier: guestId || undefined,
+        p_force_discard: forceDiscard,
       });
 
       if (error) throw error;
+
+      // ตรวจสอบผลการ validate
+      // @ts-expect-error - response type จะถูก generate หลัง migration
+      if (data && !data.success) {
+        // @ts-expect-error - validation field ยังไม่มีใน generated types
+        const validation = data.validation;
+        const errorMessage = validation?.violation_message || "ไม่สามารถทิ้งไพ่ได้";
+        
+        set({
+          error: errorMessage,
+          validationError: {
+            type: validation?.violation_type,
+            message: errorMessage,
+            canForce: validation?.violation_type === "can_meld_immediately",
+          },
+        });
+        throw new Error(errorMessage);
+      }
 
       // Reload game state
       await get().loadGameState(currentSession.id);
@@ -2408,6 +2435,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         isSelectingMeld: false,
         selectedDiscardCardId: null,
         hasDrawnThisTurn: false,
+        validationError: null,
         turnActionState: {
           mode: "idle",
           allowedActions: [],
@@ -2416,9 +2444,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
     } catch (error) {
       console.error("Failed to discard card:", error);
-      set({
-        error: error instanceof Error ? error.message : "ไม่สามารถทิ้งไพ่ได้",
-      });
+      if (!get().validationError) {
+        set({
+          error: error instanceof Error ? error.message : "ไม่สามารถทิ้งไพ่ได้",
+        });
+      }
       throw error;
     }
   },
