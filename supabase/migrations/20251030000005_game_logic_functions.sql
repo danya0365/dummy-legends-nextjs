@@ -1082,6 +1082,30 @@ BEGIN
         'target_meld_id', p_target_meld_id
       )
     );
+
+    -- บันทึกโทษให้เจ้าของกองที่ถูกฝากสเปโต (ถ้าเป็นคนอื่น)
+    IF v_target_owner IS DISTINCT FROM p_gamer_id THEN
+      INSERT INTO public.game_score_events (
+        session_id,
+        gamer_id,
+        event_type,
+        points,
+        related_meld_id,
+        related_card_ids,
+        metadata
+      ) VALUES (
+        p_session_id,
+        v_target_owner,
+        'spe_to_penalty',
+        -50 * array_length(v_speto_card_ids, 1),
+        p_target_meld_id,
+        v_speto_card_ids,
+        jsonb_build_object(
+          'action', 'layoff_target',
+          'depositor_gamer_id', p_gamer_id
+        )
+      );
+    END IF;
   END IF;
 
   -- Record move
@@ -1750,6 +1774,16 @@ BEGIN
     WHERE room_id = (SELECT room_id FROM public.game_sessions WHERE id = p_session_id)
     AND gamer_id = p_gamer_id
   );
+
+  -- ตรวจสอบและบันทึกโทษการทิ้งไพ่ (ถ้าผู้เล่นถัดไปสามารถเกิดได้ทันที)
+  IF v_next_player IS NOT NULL THEN
+    PERFORM public.record_discard_penalty_if_needed(
+      p_session_id,
+      p_gamer_id,
+      p_card_id,
+      v_next_player
+    );
+  END IF;
   
   -- Update turn
   UPDATE public.game_sessions
@@ -1940,6 +1974,44 @@ BEGIN
   FROM player_deadwood pd
   WHERE gh.session_id = pd.session_id
     AND gh.gamer_id = pd.gamer_id;
+
+  -- ตรวจสอบทิ้งโง่: หาผู้เล่นที่ทิ้งไพ่ใบสุดท้ายก่อนผู้ชนะน็อก
+  DECLARE
+    v_last_discard_gamer_id UUID;
+    v_last_discard_card_id UUID;
+  BEGIN
+    SELECT gm.gamer_id, (gm.move_data->>'card_id')::UUID
+    INTO v_last_discard_gamer_id, v_last_discard_card_id
+    FROM public.game_moves gm
+    WHERE gm.session_id = p_session_id
+      AND gm.move_type = 'discard'
+    ORDER BY gm.move_number DESC
+    LIMIT 1;
+
+    IF v_last_discard_gamer_id IS NOT NULL 
+       AND v_last_discard_gamer_id IS DISTINCT FROM p_gamer_id THEN
+      INSERT INTO public.game_score_events (
+        session_id,
+        gamer_id,
+        event_type,
+        points,
+        related_meld_id,
+        related_card_ids,
+        metadata
+      ) VALUES (
+        p_session_id,
+        v_last_discard_gamer_id,
+        'foolish_penalty',
+        -50,
+        NULL,
+        ARRAY[v_last_discard_card_id],
+        jsonb_build_object(
+          'winner_gamer_id', p_gamer_id,
+          'winning_type', p_winning_type::TEXT
+        )
+      );
+    END IF;
+  END;
 
   FOR v_player_elem IN
     SELECT elem
