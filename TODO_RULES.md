@@ -21,7 +21,10 @@
   - ตรวจสอบต้องเกิดอย่างน้อย 1 กองก่อนน็อก
   - รองรับ force discard สำหรับกรณีพิเศษ
 - ✅ คำนวณ multiplier x2/x4 สำหรับรูปแบบน็อกพิเศษในสรุปผลคะแนน @supabase/migrations/20251030000005_game_logic_functions.sql#1998-2083
-- ⚠️ ยังไม่มี UX อธิบายกติกาในเกม (เช่น Tooltip, Rule overlay)
+- 🔄 กำลังทำ UX Support
+  - ✅ ValidationErrorDialog แสดงข้อความเตือนเมื่อทิ้งไพ่ผิดกติกา @src/presentation/components/game/game-play/ValidationErrorDialog.tsx
+  - ⚠️ ยังไม่มี Tooltip อธิบายโบนัส/โทษในเกม
+  - ⚠️ ยังไม่มีสรุปเหตุการณ์โดยละเอียดในหน้าผลรอบ
 - ❌ ยังไม่รองรับโหมดกติกา Tournament/Custom หรือปรับแต้มตาม RULES.md ส่วนนี้ยังไม่เริ่ม
 - ✅ บันทึกสถิติโทษพิเศษ (spe_to_penalty, dummy_penalty, head_penalty, foolish_penalty) ใน flow ปัจจุบัน
 

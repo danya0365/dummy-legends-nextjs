@@ -14,6 +14,7 @@ import {
 import { CardBack, PlayingCard } from "../PlayingCard";
 import { DiscardStack } from "./DiscardStack";
 import { GamePlayLayoutProps } from "./types";
+import { ValidationErrorDialog } from "./ValidationErrorDialog";
 
 export function GamePlaySimpleView({
   currentRoom,
@@ -76,9 +77,12 @@ export function GamePlaySimpleView({
   onConfirmLayoff,
   onSelectLayoffTarget,
   onDiscard,
+  onForceDiscard,
+  onClearValidationError,
   onRefresh,
   onSortHandByRank,
   onSortHandBySuit,
+  validationError,
 }: GamePlayLayoutProps) {
   void _turnActionContext;
   const availableLayoffTargets = myMelds.length + tableMelds.length;
@@ -668,6 +672,13 @@ export function GamePlaySimpleView({
           </div>
         </div>
       </div>
+
+      {/* Validation Error Dialog */}
+      <ValidationErrorDialog
+        error={validationError}
+        onClose={onClearValidationError}
+        onForceAction={onForceDiscard}
+      />
     </div>
   );
 }

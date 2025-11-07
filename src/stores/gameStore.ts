@@ -364,7 +364,7 @@ interface GameStore extends RoomState {
   toggleLayoffCard: (cardId: string) => void;
   selectLayoffTarget: (meldId: string | null) => void;
   confirmLayoff: () => Promise<void>;
-  discardCard: (cardId: string) => Promise<void>;
+  discardCard: (cardId: string, forceDiscard?: boolean) => Promise<void>;
   sortHandByRank: () => Promise<void>;
   sortHandBySuit: () => Promise<void>;
   subscribeToGameSession: (sessionId: string) => Promise<void>;

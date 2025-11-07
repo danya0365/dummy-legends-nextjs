@@ -67,6 +67,11 @@ export interface GamePlayLayoutProps {
   selectedLayoffMeldId: string | null;
   isLoading: boolean;
   error: string | null;
+  validationError: {
+    type: string | null;
+    message: string;
+    canForce?: boolean;
+  } | null;
   currentTurnPlayerName: string;
   turnActionMode: TurnActionMode;
   turnActionAllowedActions: TurnActionPermission[];
@@ -100,6 +105,8 @@ export interface GamePlayLayoutProps {
   onConfirmLayoff: () => void;
   onSelectLayoffTarget: (meldId: string | null) => void;
   onDiscard: () => void;
+  onForceDiscard: () => void;
+  onClearValidationError: () => void;
   onRefresh: () => void;
   onSortHandByRank: () => void;
   onSortHandBySuit: () => void;

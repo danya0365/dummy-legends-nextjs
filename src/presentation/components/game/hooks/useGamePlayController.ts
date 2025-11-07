@@ -65,6 +65,7 @@ export function useGamePlayController({
     unsubscribeFromGame,
     isLoading,
     error,
+    validationError,
     loadGameResultSummaryForRoom,
     turnActionState,
     hasDrawnThisTurn,
@@ -614,15 +615,31 @@ export function useGamePlayController({
   const handleDiscard = useCallback(async () => {
     if (!selectedCardId || !actionAvailability.canDiscardCard) return;
     try {
-      await discardCard(selectedCardId);
+      await discardCard(selectedCardId, false);
       setSelectedCardId(null);
       setHasDrawn(false);
       setGuidanceMessage(null);
     } catch (error) {
       console.error("Discard error:", error);
-      setGuidanceMessage("ทิ้งไพ่ไม่สำเร็จ กรุณาลองใหม่");
+      // Error message จะถูกจัดการโดย validationError
     }
   }, [actionAvailability.canDiscardCard, discardCard, selectedCardId]);
+
+  const handleForceDiscard = useCallback(async () => {
+    if (!selectedCardId) return;
+    try {
+      await discardCard(selectedCardId, true);
+      setSelectedCardId(null);
+      setHasDrawn(false);
+      setGuidanceMessage(null);
+    } catch (error) {
+      console.error("Force discard error:", error);
+    }
+  }, [discardCard, selectedCardId]);
+
+  const handleClearValidationError = useCallback(() => {
+    useGameStore.setState({ validationError: null });
+  }, []);
 
   const currentTurnPlayer = otherPlayersWithDetails.find(
     (p) => p.isCurrentTurn
@@ -726,6 +743,7 @@ export function useGamePlayController({
     selectedLayoffMeldId: targetMeldId,
     isLoading,
     error,
+    validationError,
     currentTurnPlayerName,
     turnActionMode: turnActionState.mode,
     turnActionAllowedActions: turnActionState.allowedActions,
@@ -746,6 +764,8 @@ export function useGamePlayController({
     onConfirmLayoff: handleConfirmLayoff,
     onSelectLayoffTarget: handleSelectLayoffTarget,
     onDiscard: handleDiscard,
+    onForceDiscard: handleForceDiscard,
+    onClearValidationError: handleClearValidationError,
     onRefresh: handleRefresh,
     onSortHandByRank: sortHandByRank,
     onSortHandBySuit: sortHandBySuit,
