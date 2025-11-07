@@ -11,10 +11,13 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
+import { useState } from "react";
 import { CardBack, PlayingCard } from "../PlayingCard";
 import { DiscardStack } from "./DiscardStack";
 import { GamePlayLayoutProps } from "./types";
 import { ValidationErrorDialog } from "./ValidationErrorDialog";
+import { GameRulesPanel } from "./GameRulesPanel";
+import { GameRuleTooltip, GAME_RULE_TOOLTIPS } from "./GameRuleTooltip";
 
 export function GamePlaySimpleView({
   currentRoom,
@@ -85,6 +88,7 @@ export function GamePlaySimpleView({
   validationError,
 }: GamePlayLayoutProps) {
   void _turnActionContext;
+  const [isRulesPanelOpen, setIsRulesPanelOpen] = useState(false);
   const availableLayoffTargets = myMelds.length + tableMelds.length;
   const opponentMeldCount = communityMelds.length;
   const isAwaitingDrawPhase = turnActionMode === "awaiting_draw";
@@ -130,13 +134,23 @@ export function GamePlaySimpleView({
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
-          <button
-            onClick={() => onBack()}
-            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            ออกจากเกม
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onBack()}
+              className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              ออกจากเกม
+            </button>
+            <button
+              onClick={() => setIsRulesPanelOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+              title="ดูกติกาเกม"
+            >
+              <Sparkles className="h-4 w-4" />
+              กติกา
+            </button>
+          </div>
 
           <div className="text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -297,9 +311,14 @@ export function GamePlaySimpleView({
 
               {/* Discard */}
               <div className="text-center">
-                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                  กองทิ้ง
-                </p>
+                <div className="flex items-center justify-center gap-2 mb-2 text-xs text-gray-600 dark:text-gray-400">
+                  <span>กองทิ้ง</span>
+                  <GameRuleTooltip
+                    content={GAME_RULE_TOOLTIPS.discardPenalty}
+                    position="top"
+                    size="sm"
+                  />
+                </div>
                 <DiscardStack
                   stack={discardStack}
                   selectedCardId={selectedDiscardCardId}
@@ -315,7 +334,7 @@ export function GamePlaySimpleView({
                   cardSize="medium"
                 />
                 <button
-                  className="mt-3 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="relative mt-3 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={onDrawFromDiscard}
                   disabled={
                     !selectedDiscardCardId ||
@@ -325,6 +344,13 @@ export function GamePlaySimpleView({
                 >
                   หยิบจากกองเพื่อเกิด
                 </button>
+                <div className="mt-1 flex justify-center">
+                  <GameRuleTooltip
+                    content={GAME_RULE_TOOLTIPS.discardPickup}
+                    position="top"
+                    size="sm"
+                  />
+                </div>
                 {isDiscardAssistActive && (
                   <div className="mt-2 space-y-1 text-xs text-blue-700 dark:text-blue-300">
                     {discardPickupCount > 0 && (
@@ -444,6 +470,12 @@ export function GamePlaySimpleView({
                 </button>
               )}
 
+              <GameRuleTooltip
+                content={GAME_RULE_TOOLTIPS.meld}
+                position="bottom"
+                size="sm"
+              />
+
               {isSelectingLayoff ? (
                 <>
                   <button
@@ -472,6 +504,11 @@ export function GamePlaySimpleView({
                   โหมดฝากไพ่
                 </button>
               )}
+              <GameRuleTooltip
+                content={GAME_RULE_TOOLTIPS.layoff}
+                position="bottom"
+                size="sm"
+              />
 
               <div className="flex flex-wrap gap-2">
                 <button
@@ -678,6 +715,12 @@ export function GamePlaySimpleView({
         error={validationError}
         onClose={onClearValidationError}
         onForceAction={onForceDiscard}
+      />
+
+      {/* Game Rules Panel */}
+      <GameRulesPanel
+        isOpen={isRulesPanelOpen}
+        onClose={() => setIsRulesPanelOpen(false)}
       />
     </div>
   );
