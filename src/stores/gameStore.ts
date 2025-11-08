@@ -139,7 +139,9 @@ const normalizeEventDetail = (
   return {};
 };
 
-const mapGameEventLogRow = (row: GameEventLogRowPayload): GameEventLogEntry => ({
+const mapGameEventLogRow = (
+  row: GameEventLogRowPayload
+): GameEventLogEntry => ({
   id: row.id,
   sessionId: row.session_id,
   roomId: row.room_id,
@@ -574,7 +576,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             .maybeSingle();
 
           if (existingError) {
-            console.warn("Failed to validate stored guest gamer id", existingError);
+            console.warn(
+              "Failed to validate stored guest gamer id",
+              existingError
+            );
             resolvedStoredGamerId = null;
           } else if (!existingGamer) {
             // Local storage holds stale gamerId (e.g. after DB reset)
@@ -807,9 +812,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
 
       const findIndex = (id: string | null) =>
-        id
-          ? discardEntries.findIndex((entry) => entry.card.id === id)
-          : -1;
+        id ? discardEntries.findIndex((entry) => entry.card.id === id) : -1;
 
       const entriesWithMeta = discardEntries.map((entry, index) => ({
         entry,
@@ -846,7 +849,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
 
         const uniqueIndices = Array.from(
-          new Set([primaryIndex, ...meldIndices.filter((index) => index !== primaryIndex)])
+          new Set([
+            primaryIndex,
+            ...meldIndices.filter((index) => index !== primaryIndex),
+          ])
         ).slice(0, 2);
 
         const ranks = uniqueIndices.map((idx) => getRank(idx));
@@ -908,7 +914,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           selectedDiscardCardId: primaryEntry.card.id,
           selectedDiscardPickupCardIds: pickupIds,
           selectedDiscardMeldCardIds: uniqueMeldIds,
-          pendingMeldCardIds: options?.resetPending ? [] : state.pendingMeldCardIds,
+          pendingMeldCardIds: options?.resetPending
+            ? []
+            : state.pendingMeldCardIds,
           isSelectingMeld: true,
           turnActionState: {
             mode: "assembling_discard_meld",
@@ -1035,9 +1043,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
       }
 
-      return buildSelectionStateFromIndices(primaryIndex, [primaryIndex, clickedIndex], {
-        resetPending: false,
-      });
+      return buildSelectionStateFromIndices(
+        primaryIndex,
+        [primaryIndex, clickedIndex],
+        {
+          resetPending: false,
+        }
+      );
     });
   },
 
@@ -1054,8 +1066,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((state) => ({
       turnActionState: {
         mode,
-        allowedActions: options?.allowedActions ?? state.turnActionState.allowedActions,
-        context: { ...state.turnActionState.context, ...(options?.context ?? {}) },
+        allowedActions:
+          options?.allowedActions ?? state.turnActionState.allowedActions,
+        context: {
+          ...state.turnActionState.context,
+          ...(options?.context ?? {}),
+        },
       },
     }));
   },
@@ -1554,11 +1570,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       const resolvedGuestId = get().guestId;
 
-      const { data, error } = await supabase.rpc("get_active_session_for_room", {
-        p_room_id: roomId,
-        p_gamer_id: resolvedGamerId,
-        p_guest_identifier: resolvedGuestId || undefined,
-      });
+      const { data, error } = await supabase.rpc(
+        "get_active_session_for_room",
+        {
+          p_room_id: roomId,
+          p_gamer_id: resolvedGamerId,
+          p_guest_identifier: resolvedGuestId || undefined,
+        }
+      );
 
       if (error) throw error;
       return (data as string | null) ?? null;
@@ -1596,14 +1615,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         remaining_cards: GameCardRow[];
       };
 
-      const { data, error } = await supabase.rpc(
-        "get_game_result_summary",
-        {
-          p_session_id: sessionId,
-          p_gamer_id: resolvedGamerId,
-          p_guest_identifier: guestId || undefined,
-        }
-      );
+      const { data, error } = await supabase.rpc("get_game_result_summary", {
+        p_session_id: sessionId,
+        p_gamer_id: resolvedGamerId,
+        p_guest_identifier: guestId || undefined,
+      });
 
       if (error) throw error;
 
@@ -1643,7 +1659,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         totalMoves: row.total_moves,
         durationSeconds: row.game_duration_seconds,
         createdAt: row.created_at,
-        summaryMetadata: (row.summary_metadata as Record<string, unknown>) ?? {},
+        summaryMetadata:
+          (row.summary_metadata as Record<string, unknown>) ?? {},
         eloChanges: (row.elo_changes as Record<string, unknown>) ?? {},
       });
 
@@ -1701,7 +1718,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           remainingCards,
           metadata,
           deadwoodScore:
-            typeof metadata.deadwood_score === "number" ? metadata.deadwood_score : 0,
+            typeof metadata.deadwood_score === "number"
+              ? metadata.deadwood_score
+              : 0,
           deadwoodCards: deadwoodCardsRaw,
           createdAt: row.created_at,
         };
@@ -1720,7 +1739,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({
         isLoadingResultSummary: false,
         resultSummaryError:
-          error instanceof Error ? error.message : "ไม่สามารถโหลดข้อมูลสรุปเกมได้",
+          error instanceof Error
+            ? error.message
+            : "ไม่สามารถโหลดข้อมูลสรุปเกมได้",
       });
     }
   },
@@ -1770,7 +1791,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({
         isLoadingResultSummary: false,
         resultSummaryError:
-          error instanceof Error ? error.message : "ไม่สามารถโหลดข้อมูลสรุปเกมได้",
+          error instanceof Error
+            ? error.message
+            : "ไม่สามารถโหลดข้อมูลสรุปเกมได้",
       });
     }
   },
@@ -2020,15 +2043,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 card,
                 canSelect: true,
               })),
-              selectedCardId: prevSelectedDiscardId &&
-                discardStackCards.some((card) => card.id === prevSelectedDiscardId)
-                ? prevSelectedDiscardId
-                : null,
+              selectedCardId:
+                prevSelectedDiscardId &&
+                discardStackCards.some(
+                  (card) => card.id === prevSelectedDiscardId
+                )
+                  ? prevSelectedDiscardId
+                  : null,
             }
           : null;
 
       const isMyTurn = session?.currentTurnGamerId === gamerId;
-      const hasDrawn = prevState.hasDrawnThisTurn && isMyTurn;
+      const hasDrawnFromPayload = Boolean(payload.has_drawn_this_turn);
+      const hasDrawn = isMyTurn ? hasDrawnFromPayload : false;
 
       const nextTurnState: TurnActionState = !isMyTurn
         ? { mode: "idle", allowedActions: [], context: {} }
@@ -2201,9 +2228,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         isSelectingMeld: true,
         pendingMeldCardIds: [],
         turnActionState: {
-          mode: isDiscardMeld
-            ? "assembling_discard_meld"
-            : "selecting_meld",
+          mode: isDiscardMeld ? "assembling_discard_meld" : "selecting_meld",
           allowedActions: [
             "toggle_meld_card",
             "confirm_meld",
@@ -2215,10 +2240,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             requiredHandCardsForSelectedDiscard,
             remainingHandCardsNeeded: requiredHandCardsForSelectedDiscard,
             totalMeldSelectionCount: discardSelectionCount,
-            remainingCardsNeededForMeld: Math.max(
-              0,
-              3 - discardSelectionCount
-            ),
+            remainingCardsNeededForMeld: Math.max(0, 3 - discardSelectionCount),
             isDiscardMeld,
           },
         },
@@ -2298,7 +2320,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         requiredHandCardsForSelectedDiscard - pendingMeldCardIds.length
       );
       const remainingCardsNeededForMeld = Math.max(0, 3 - totalSelected);
-      const isDiscardMeld = Boolean(state.turnActionState.context.isDiscardMeld);
+      const isDiscardMeld = Boolean(
+        state.turnActionState.context.isDiscardMeld
+      );
       const hasPending = pendingMeldCardIds.length > 0;
 
       const nextMode: TurnActionMode = isDiscardMeld
@@ -2416,7 +2440,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       return {
         pendingLayoffCardIds,
-        isSelectingLayoff: pendingLayoffCardIds.length > 0 || state.targetMeldId !== null,
+        isSelectingLayoff:
+          pendingLayoffCardIds.length > 0 || state.targetMeldId !== null,
         turnActionState: {
           mode: "selecting_layoff",
           allowedActions: [
@@ -2519,13 +2544,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const { currentSession, gamerId, guestId } = get();
       if (!currentSession || !gamerId) throw new Error("ไม่พบเซสชันเกม");
 
-      const { data, error } = await supabase.rpc("discard_card_with_validation", {
-        p_session_id: currentSession.id,
-        p_gamer_id: gamerId,
-        p_card_id: cardId,
-        p_guest_identifier: guestId || undefined,
-        p_force_discard: forceDiscard,
-      });
+      const { data, error } = await supabase.rpc(
+        "discard_card_with_validation",
+        {
+          p_session_id: currentSession.id,
+          p_gamer_id: gamerId,
+          p_card_id: cardId,
+          p_guest_identifier: guestId || undefined,
+          p_force_discard: forceDiscard,
+        }
+      );
 
       if (error) throw error;
 
@@ -2534,8 +2562,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (data && !data.success) {
         // @ts-expect-error - validation field ยังไม่มีใน generated types
         const validation = data.validation;
-        const errorMessage = validation?.violation_message || "ไม่สามารถทิ้งไพ่ได้";
-        
+        const errorMessage =
+          validation?.violation_message || "ไม่สามารถทิ้งไพ่ได้";
+
         set({
           error: errorMessage,
           validationError: {
@@ -2594,7 +2623,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       console.error("Failed to sort hand by rank:", error);
       set({
         error:
-          error instanceof Error ? error.message : "ไม่สามารถจัดเรียงไพ่ตามแต้มได้",
+          error instanceof Error
+            ? error.message
+            : "ไม่สามารถจัดเรียงไพ่ตามแต้มได้",
       });
       throw error;
     } finally {
@@ -2624,7 +2655,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       console.error("Failed to sort hand by suit:", error);
       set({
         error:
-          error instanceof Error ? error.message : "ไม่สามารถจัดเรียงไพ่ตามดอกได้",
+          error instanceof Error
+            ? error.message
+            : "ไม่สามารถจัดเรียงไพ่ตามดอกได้",
       });
       throw error;
     } finally {

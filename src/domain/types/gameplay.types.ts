@@ -256,6 +256,7 @@ export interface GameStatePayload {
     created_at?: string | null;
     cards: GameCardRow[];
   }> | null;
+  has_drawn_this_turn?: boolean | null;
 }
 
 export interface GameMove {

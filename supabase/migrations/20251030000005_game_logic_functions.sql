@@ -2548,6 +2548,23 @@ BEGIN
     RAISE EXCEPTION 'Not authorized';
   END IF;
   
+  WITH last_moves AS (
+    SELECT
+      (
+        SELECT MAX(gm.move_number)
+        FROM public.game_moves gm
+        WHERE gm.session_id = p_session_id
+          AND gm.gamer_id = p_gamer_id
+          AND gm.move_type IN ('draw_deck', 'draw_discard')
+      ) AS last_draw_move_number,
+      (
+        SELECT MAX(gm.move_number)
+        FROM public.game_moves gm
+        WHERE gm.session_id = p_session_id
+          AND gm.gamer_id = p_gamer_id
+          AND gm.move_type = 'discard'
+      ) AS last_discard_move_number
+  )
   SELECT json_build_object(
     'session', row_to_json(s),
     'my_hand', (
@@ -2629,9 +2646,19 @@ BEGIN
       FROM public.game_hands h
       WHERE h.session_id = p_session_id
       AND h.gamer_id != p_gamer_id
+    ),
+    'has_drawn_this_turn', (
+      SELECT
+        CASE
+          WHEN lm.last_draw_move_number IS NULL THEN false
+          WHEN lm.last_discard_move_number IS NULL THEN true
+          ELSE lm.last_draw_move_number > lm.last_discard_move_number
+        END
+      FROM last_moves lm
     )
   ) INTO v_result
   FROM public.game_sessions s
+  CROSS JOIN last_moves
   WHERE s.id = p_session_id;
   
   RETURN v_result;
