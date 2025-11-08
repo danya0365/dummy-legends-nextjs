@@ -379,6 +379,8 @@ DECLARE
   v_discard_top_card_id UUID;
   v_discard_cards UUID[];
   v_position INTEGER := 0;
+  v_last_draw_move_number INTEGER;
+  v_has_post_draw_discard BOOLEAN := false;
 BEGIN
   -- Check access
   v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
@@ -407,6 +409,30 @@ BEGIN
   -- Commented out hand count check to allow drawing from discard when hand is full
   
   -- Try to draw from deck
+  SELECT gm.move_number
+  INTO v_last_draw_move_number
+  FROM public.game_moves gm
+  WHERE gm.session_id = p_session_id
+    AND gm.gamer_id = p_gamer_id
+    AND gm.move_type IN ('draw_deck', 'draw_discard')
+  ORDER BY gm.move_number DESC
+  LIMIT 1;
+
+  IF v_last_draw_move_number IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.game_moves gm
+      WHERE gm.session_id = p_session_id
+        AND gm.gamer_id = p_gamer_id
+        AND gm.move_type = 'discard'
+        AND gm.move_number > v_last_draw_move_number
+    ) INTO v_has_post_draw_discard;
+
+    IF NOT v_has_post_draw_discard THEN
+      RAISE EXCEPTION 'Must discard before drawing again';
+    END IF;
+  END IF;
+
   SELECT id INTO v_card_id
   FROM public.game_cards
   WHERE session_id = p_session_id
@@ -549,9 +575,9 @@ DECLARE
   v_remaining_card UUID;
   v_new_discard_top UUID;
   v_result UUID;
-  v_last_move_type public.game_move_type;
-  v_last_move_data JSONB;
-  v_last_move_created_at TIMESTAMP;
+  v_last_draw_move_type public.game_move_type;
+  v_last_draw_move_data JSONB;
+  v_last_draw_move_number INTEGER;
   v_last_draw_discard_card UUID;
   v_last_draw_card_still_in_hand BOOLEAN := false;
 BEGIN
@@ -593,27 +619,40 @@ BEGIN
     RAISE EXCEPTION 'All meld cards must be in your hand';
   END IF;
 
-  -- ตรวจสอบ move ล่าสุดว่าจั่วมาจริงและกรณีจั่วกองทิ้งต้องใช้ไพ่ใบที่หยิบ
+  -- ตรวจสอบว่าจั่วไพ่มาในเทิร์นปัจจุบัน และยังไม่ทิ้งไพ่หลังจากจั่ว (ตามกติกาใน RULES.md)
   SELECT
     gm.move_type,
     gm.move_data,
-    gm.created_at
-  INTO v_last_move_type, v_last_move_data, v_last_move_created_at
+    gm.move_number
+  INTO v_last_draw_move_type, v_last_draw_move_data, v_last_draw_move_number
   FROM public.game_moves gm
   WHERE gm.session_id = p_session_id
+    AND gm.gamer_id = p_gamer_id
+    AND gm.move_type IN ('draw_deck', 'draw_discard')
   ORDER BY gm.move_number DESC
   LIMIT 1;
 
-  IF v_last_move_type IS NULL OR v_last_move_type NOT IN ('draw_deck', 'draw_discard') THEN
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'Must draw a card before creating a meld';
   END IF;
 
-  IF v_last_move_type = 'draw_discard' THEN
-    IF v_last_move_data ->> 'card_id' IS NULL THEN
+  IF EXISTS (
+    SELECT 1
+    FROM public.game_moves gm
+    WHERE gm.session_id = p_session_id
+      AND gm.gamer_id = p_gamer_id
+      AND gm.move_type = 'discard'
+      AND gm.move_number > v_last_draw_move_number
+  ) THEN
+    RAISE EXCEPTION 'Must draw a card before creating a meld';
+  END IF;
+
+  IF v_last_draw_move_type = 'draw_discard' THEN
+    IF v_last_draw_move_data ->> 'card_id' IS NULL THEN
       RAISE EXCEPTION 'Invalid draw_discard move data';
     END IF;
 
-    v_last_draw_discard_card := (v_last_move_data ->> 'card_id')::uuid;
+    v_last_draw_discard_card := (v_last_draw_move_data ->> 'card_id')::uuid;
 
     SELECT owner_gamer_id = p_gamer_id AND location = 'hand'
     INTO v_last_draw_card_still_in_hand
@@ -870,9 +909,11 @@ DECLARE
   v_new_max_suit TEXT;
   v_score_value INTEGER := 0;
   v_speto_card_ids UUID[] := '{}';
+  v_speto_count INTEGER := 0;
   v_move_number INTEGER;
   v_metadata JSONB;
   v_total_cards INTEGER := 0;
+  v_existing_score INTEGER := 0;
 BEGIN
   IF p_layoff_card_ids IS NULL OR array_length(p_layoff_card_ids, 1) = 0 THEN
     RAISE EXCEPTION 'Layoff requires at least one card';
@@ -912,12 +953,16 @@ BEGIN
 
   v_target_owner := v_target_meld.gamer_id;
 
+  WITH target_cards AS (
+    SELECT gc.id
+    FROM public.game_cards gc
+    WHERE gc.session_id = p_session_id
+      AND gc.meld_id = p_target_meld_id
+    FOR UPDATE
+  )
   SELECT COUNT(*)
   INTO v_target_cards_count
-  FROM public.game_cards
-  WHERE session_id = p_session_id
-    AND meld_id = p_target_meld_id
-  FOR UPDATE;
+  FROM target_cards;
 
   IF v_target_cards_count = 0 THEN
     RAISE EXCEPTION 'Target meld has no cards';
@@ -934,18 +979,26 @@ BEGIN
     RAISE EXCEPTION 'Layoff cards must be in your hand';
   END IF;
 
+  WITH layoff_cards AS (
+    SELECT
+      gc.id,
+      gc.rank,
+      gc.suit,
+      public.get_card_rank_order(gc.rank) AS rank_order
+    FROM public.game_cards gc
+    WHERE gc.session_id = p_session_id
+      AND gc.id = ANY(p_layoff_card_ids)
+    FOR UPDATE
+  )
   SELECT
-    array_agg(gc.id ORDER BY gc.id),
-    array_agg(public.get_card_rank_order(gc.rank) ORDER BY gc.id),
-    COUNT(DISTINCT gc.suit),
-    MIN(gc.suit),
-    MAX(gc.suit),
-    MIN(gc.rank)
+    array_agg(layoff_cards.id ORDER BY layoff_cards.id),
+    array_agg(layoff_cards.rank_order ORDER BY layoff_cards.id),
+    COUNT(DISTINCT layoff_cards.suit),
+    MIN(layoff_cards.suit),
+    MAX(layoff_cards.suit),
+    MIN(layoff_cards.rank)
   INTO v_new_cards, v_new_rank_orders, v_new_suit_count, v_new_min_suit, v_new_max_suit, v_target_rank
-  FROM public.game_cards gc
-  WHERE gc.session_id = p_session_id
-    AND gc.id = ANY(p_layoff_card_ids)
-  FOR UPDATE;
+  FROM layoff_cards;
 
   IF v_new_cards IS NULL OR array_length(v_new_cards, 1) <> array_length(p_layoff_card_ids, 1) THEN
     RAISE EXCEPTION 'Some layoff cards were not found';
@@ -1028,10 +1081,7 @@ BEGIN
       gc.id,
       ROW_NUMBER() OVER (
         ORDER BY
-          CASE
-            WHEN v_target_meld.meld_type = 'run' THEN public.get_card_rank_order(gc.rank)
-            ELSE gc.rank::TEXT
-          END,
+          public.get_card_rank_order(gc.rank),
           gc.suit,
           gc.id
       ) - 1 AS new_index
@@ -1061,6 +1111,8 @@ BEGIN
   WHERE session_id = p_session_id
     AND id = ANY(p_layoff_card_ids);
 
+  v_speto_count := COALESCE(array_length(v_speto_card_ids, 1), 0);
+
   v_metadata := COALESCE(v_target_meld.metadata, '{}'::jsonb);
   v_metadata := jsonb_set(
     v_metadata,
@@ -1068,7 +1120,7 @@ BEGIN
     COALESCE(v_metadata -> 'card_ids', '[]'::jsonb) || to_jsonb(p_layoff_card_ids),
     true
   );
-  IF array_length(v_speto_card_ids, 1) > 0 THEN
+  IF v_speto_count > 0 THEN
     v_metadata := jsonb_set(
       v_metadata,
       '{speto_card_ids}',
@@ -1079,7 +1131,7 @@ BEGIN
 
   UPDATE public.game_melds
   SET metadata = v_metadata,
-      score_value = COALESCE(score_value, 0) + v_score_value + (array_length(v_speto_card_ids, 1) * 50)
+      score_value = GREATEST(COALESCE(score_value, 0), 0) + v_score_value + (v_speto_count * 50)
   WHERE id = p_target_meld_id;
 
   -- Score events
@@ -1115,13 +1167,13 @@ BEGIN
       'target_meld_id', p_target_meld_id,
       'card_ids', to_jsonb(p_layoff_card_ids),
       'target_owner', v_target_owner,
-      'speto_count', array_length(v_speto_card_ids, 1)
+      'speto_count', v_speto_count
     ),
     v_target_owner,
     p_guest_identifier
   );
 
-  IF array_length(v_speto_card_ids, 1) > 0 THEN
+  IF v_speto_count > 0 THEN
     INSERT INTO public.game_score_events (
       session_id,
       gamer_id,
@@ -1134,7 +1186,7 @@ BEGIN
       p_session_id,
       p_gamer_id,
       'spe_to_deposit_bonus',
-      50 * array_length(v_speto_card_ids, 1),
+      50 * v_speto_count,
       p_target_meld_id,
       v_speto_card_ids,
       jsonb_build_object(
