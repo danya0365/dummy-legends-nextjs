@@ -32,6 +32,8 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
     initializeGamer,
     joinRoom,
     leaveRoom,
+    gameResultSummary,
+    loadGameResultSummaryForRoom,
     toggleReady,
     startGame,
     startGameSession,
@@ -105,6 +107,8 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
     currentRoom &&
     currentRoom.currentPlayerCount >= 2;
   const isGamePlaying = currentRoom?.status === "playing";
+  const isGameFinished = currentRoom?.status === "finished";
+  const resultSessionId = gameResultSummary?.sessionId;
 
   const handleResumeGame = useCallback(async (): Promise<boolean> => {
     if (!currentRoom) return false;
@@ -454,6 +458,33 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                 </button>
                 <p className="mt-3 text-xs text-center text-gray-500 dark:text-gray-400">
                   เกมกำลังดำเนินอยู่ กดเพื่อกลับเข้าสู่เกม
+                </p>
+              </div>
+            )}
+
+            {isGameFinished && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  เกมจบแล้ว
+                </h3>
+                <Link
+                  href={
+                    resultSessionId
+                      ? `/game/room/${currentRoom.id}/result?sessionId=${resultSessionId}`
+                      : `/game/room/${currentRoom.id}/result`
+                  }
+                  onClick={() => {
+                    if (!resultSessionId) {
+                      void loadGameResultSummaryForRoom(currentRoom.id);
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-4 rounded-lg font-semibold text-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors"
+                >
+                  <Trophy className="h-6 w-6" />
+                  ดูผลสรุปเกม
+                </Link>
+                <p className="mt-3 text-xs text-center text-gray-500 dark:text-gray-400">
+                  เรียนรู้คะแนนและสถิติของรอบล่าสุด
                 </p>
               </div>
             )}
