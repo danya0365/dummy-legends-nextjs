@@ -8,6 +8,7 @@ import {
 } from "@/src/domain/types/gameplay.types";
 import { useGameResultSummary } from "@/src/presentation/presenters/game/useGameResultSummary";
 import { cn } from "@/src/utils/cn";
+import { PlayingCard } from "@/src/presentation/components/game/PlayingCard";
 
 interface GameResultSummaryViewProps {
   sessionId?: string;
@@ -157,19 +158,30 @@ function PlayerDisplayCard({
       {playerMelds.length > 0 && (
         <div className="mt-4 space-y-3">
           <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">ชุดไพ่ที่เกิด</div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {playerMelds.map((meld) => (
               <div
                 key={meld.id}
-                className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300"
+                className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40"
               >
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-slate-900 dark:text-slate-100">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                     {meld.meldType === "run" ? "เรียง" : "ตอง"}
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {meld.cards.map((card) => `${card.rank}${card.suit[0].toUpperCase()}`).join(" • ")}
+                    {formatPoints(meld.scoreValue ?? 0)}
                   </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {meld.cards.map((card) => (
+                    <PlayingCard
+                      key={card.id}
+                      card={card}
+                      size="small"
+                      showBottomRank
+                      showCardValue
+                    />
+                  ))}
                 </div>
               </div>
             ))}
@@ -180,15 +192,16 @@ function PlayerDisplayCard({
       {player.remainingCards.length > 0 && (
         <div className="mt-4">
           <div className="text-sm font-semibold text-rose-600 dark:text-rose-400">ไพ่ที่ค้างอยู่ในมือ</div>
-          <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-600 dark:text-slate-300">
+          <div className="mt-3 flex flex-wrap gap-3">
             {player.remainingCards.map((card) => (
-              <span
+              <PlayingCard
                 key={card.id}
-                className="rounded-md bg-rose-50 px-2 py-1 font-medium text-rose-600 dark:bg-rose-900/30 dark:text-rose-300"
-              >
-                {card.rank}
-                {card.suit[0].toUpperCase()}
-              </span>
+                card={card}
+                size="small"
+                highlight="none"
+                showBottomRank
+                showCardValue
+              />
             ))}
           </div>
         </div>
