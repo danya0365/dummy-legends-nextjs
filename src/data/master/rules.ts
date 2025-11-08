@@ -210,7 +210,7 @@ export const DUMMY_RULES_CONTENT: DummyRulesContent = {
       {
         id: "dummy-discard",
         title: "ทิ้งมี่",
-        description: "ทิ้งไพ่ที่คนอื่นนำไปเกิดได้ทันที",
+        description: "ทิ้งไพ่ที่ตรงกับชุดบนโต๊ะจนสามารถฝากได้ ถือว่าทิ้งผิดและถูกหักทันที",
         points: "-50 แต้ม",
       },
       {
@@ -222,13 +222,21 @@ export const DUMMY_RULES_CONTENT: DummyRulesContent = {
       {
         id: "full-discard",
         title: "ทิ้งเต็ม",
-        description: "ทิ้งไพ่ที่ทำให้คนอื่นเรียงหรือตองกับกองกลางได้",
+        description:
+          "ทิ้งไพ่ครบชุดเรียงหรือชุดตองลงกองทิ้ง ถือว่าทำผิดกติกาและจะถูกหักทันที",
         points: "-50 แต้ม",
       },
       {
         id: "spe-to-target",
         title: "ถูกฝากสเปโต",
         description: "ลงชุดที่คนอื่นฝากสเปโตได้",
+        points: "-50 แต้ม",
+      },
+      {
+        id: "spe-to-discard",
+        title: "ทิ้งปี้สเปโต",
+        description:
+          "ทิ้งไพ่ที่เปิดโอกาสให้ผู้เล่นถัดไปใช้สเปโตมารวมกับไพ่ที่เราทิ้งได้ทันที",
         points: "-50 แต้ม",
       },
       {
