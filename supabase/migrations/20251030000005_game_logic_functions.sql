@@ -867,7 +867,7 @@ BEGIN
     v_result := public.finish_game_round(
       p_session_id => p_session_id,
       p_gamer_id => p_gamer_id,
-      p_winning_type => 'dummy_finish',
+      p_winning_type => 'dummy_finish'::public.game_move_type,
       p_guest_identifier => p_guest_identifier
     );
 
@@ -2021,7 +2021,15 @@ BEGIN
     RAISE EXCEPTION 'Winning type is required';
   END IF;
 
-  IF NOT (p_winning_type = ANY(ARRAY['knock', 'gin', 'dummy_finish'])) THEN
+  IF NOT (
+    p_winning_type = ANY(
+      ARRAY[
+        'knock'::public.game_move_type,
+        'gin'::public.game_move_type,
+        'dummy_finish'::public.game_move_type
+      ]
+    )
+  ) THEN
     RAISE EXCEPTION 'Unsupported winning type %', p_winning_type;
   END IF;
 
@@ -2061,11 +2069,11 @@ BEGIN
     AND owner_gamer_id = p_gamer_id
     AND location = 'hand';
 
-  IF p_winning_type = 'gin' THEN
+  IF p_winning_type = 'gin'::public.game_move_type THEN
     IF v_deadwood_count > 0 THEN
       RAISE EXCEPTION 'Gin requires zero deadwood cards';
     END IF;
-  ELSIF p_winning_type = 'knock' THEN
+  ELSIF p_winning_type = 'knock'::public.game_move_type THEN
     IF v_deadwood_value > 10 THEN
       RAISE EXCEPTION 'Knock requires deadwood value of 10 or less';
     END IF;
@@ -2160,7 +2168,7 @@ BEGIN
         ARRAY[v_last_discard_card_id],
         jsonb_build_object(
           'winner_gamer_id', p_gamer_id,
-          'winning_type', p_winning_type::TEXT
+          'winning_type', (p_winning_type::public.game_move_type)::TEXT
         )
       );
     END IF;
@@ -2181,7 +2189,13 @@ BEGIN
 
     IF v_player_id = p_gamer_id THEN
       v_finish_bonus_points := CASE
-        WHEN p_winning_type IN ('dummy_finish', 'knock', 'gin') THEN 50
+        WHEN p_winning_type = ANY(
+          ARRAY[
+            'dummy_finish'::public.game_move_type,
+            'knock'::public.game_move_type,
+            'gin'::public.game_move_type
+          ]
+        ) THEN 50
         ELSE 0
       END;
 
@@ -2201,7 +2215,10 @@ BEGIN
           v_finish_bonus_points,
           NULL,
           '{}',
-          jsonb_build_object('winning_type', p_winning_type::TEXT)
+          jsonb_build_object(
+            'winning_type',
+            (p_winning_type::public.game_move_type)::TEXT
+          )
         );
       END IF;
     ELSE
@@ -2374,7 +2391,7 @@ BEGIN
   UPDATE public.game_sessions
   SET is_active = false,
       winner_gamer_id = p_gamer_id,
-      winning_type = p_winning_type::TEXT,
+      winning_type = (p_winning_type::public.game_move_type)::TEXT,
       finished_at = NOW(),
       current_turn_gamer_id = NULL
   WHERE id = p_session_id;
