@@ -9,6 +9,7 @@ import {
 import { useGameResultSummary } from "@/src/presentation/presenters/game/useGameResultSummary";
 import { cn } from "@/src/utils/cn";
 import { PlayingCard } from "@/src/presentation/components/game/PlayingCard";
+import { useGameStore } from "@/src/stores/gameStore";
 
 interface GameResultSummaryViewProps {
   sessionId?: string;
@@ -21,6 +22,8 @@ interface PlayerDisplayCardProps {
   isCurrentUser: boolean;
   melds: GameResultMeld[];
   scoreEvents: GameScoreEventEntry[];
+  displayName: string;
+  avatarUrl?: string | null;
 }
 
 const eventIconMap: Record<string, string> = {
@@ -50,6 +53,8 @@ function PlayerDisplayCard({
   isCurrentUser,
   melds,
   scoreEvents,
+  displayName,
+  avatarUrl,
 }: PlayerDisplayCardProps) {
   const playerMelds = useMemo(
     () =>
@@ -65,10 +70,6 @@ function PlayerDisplayCard({
   );
 
   const metadata = player.metadata ?? {};
-  const displayName =
-    typeof metadata.displayName === "string"
-      ? metadata.displayName
-      : undefined;
   const isCurrent =
     typeof metadata.isCurrentUser === "boolean" ? metadata.isCurrentUser : false;
 
@@ -82,18 +83,32 @@ function PlayerDisplayCard({
       )}
     >
       <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
-            {player.isWinner && <span className="text-amber-500">🏆</span>}
-            <span>
-              {displayName ?? `ผู้เล่น ${player.position}`}
-              {(isCurrentUser || isCurrent) && (
-                <span className="ml-2 text-sm text-emerald-400">(คุณ)</span>
-              )}
-            </span>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-linear-to-br from-slate-200 to-slate-300 text-base font-semibold text-slate-700 shadow-sm dark:from-slate-700 dark:to-slate-800 dark:text-slate-100">
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                className="h-full w-full rounded-full object-cover"
+              />
+            ) : (
+              <span>{displayName.charAt(0).toUpperCase()}</span>
+            )}
           </div>
-          <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            อันดับที่ {player.position} • คะแนนรวม {formatPoints(player.totalPoints)}
+          <div>
+            <div className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {player.isWinner && <span className="text-amber-500">🏆</span>}
+              <span>
+                {displayName}
+                {(isCurrentUser || isCurrent) && (
+                  <span className="ml-2 text-sm text-emerald-400">(คุณ)</span>
+                )}
+              </span>
+            </div>
+            <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              อันดับที่ {player.position} • คะแนนรวม {formatPoints(player.totalPoints)}
+            </div>
           </div>
         </div>
         <div className="rounded-lg bg-slate-900 px-3 py-1 text-sm font-medium text-white dark:bg-slate-200 dark:text-slate-900">
@@ -157,7 +172,12 @@ function PlayerDisplayCard({
 
       {playerMelds.length > 0 && (
         <div className="mt-4 space-y-3">
-          <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">ชุดไพ่ที่เกิด</div>
+          <div className="flex items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-300">
+            <span>ชุดไพ่ที่เกิด</span>
+            <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+              {player.displayedMeldIds.length} ชุด
+            </span>
+          </div>
           <div className="space-y-3">
             {playerMelds.map((meld) => (
               <div
@@ -216,10 +236,24 @@ export function GameResultSummaryView({
   onClose,
 }: GameResultSummaryViewProps) {
   const [state] = useGameResultSummary(sessionId, roomId);
+  const currentRoom = useGameStore((store) => store.currentRoom);
 
   const hasRoom = !!roomId;
   const hasSession = !!sessionId;
   const isEmpty = !state.summary && !state.loading && !state.error;
+
+  const playerDisplayLookup = useMemo(() => {
+    const map = new Map<string, { displayName: string; avatarUrl?: string | null }>();
+
+    currentRoom?.players.forEach((player) => {
+      map.set(player.userId, {
+        displayName: player.displayName || player.username || "ผู้เล่น",
+        avatarUrl: player.avatar,
+      });
+    });
+
+    return map;
+  }, [currentRoom?.players]);
 
   return (
     <div className="flex h-full flex-col gap-6">
@@ -286,6 +320,14 @@ export function GameResultSummaryView({
                 isCurrentUser={player.metadata?.isCurrentUser === true}
                 melds={state.melds}
                 scoreEvents={state.scoreEvents}
+                displayName={
+                  (typeof player.metadata?.displayName === "string"
+                    ? player.metadata.displayName
+                    : undefined) ??
+                  playerDisplayLookup.get(player.gamerId)?.displayName ??
+                  `ผู้เล่น ${player.position}`
+                }
+                avatarUrl={playerDisplayLookup.get(player.gamerId)?.avatarUrl}
               />
             ))}
         </div>
