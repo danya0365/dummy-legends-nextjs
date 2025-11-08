@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface GameRoomViewProps {
   roomId: string;
@@ -44,6 +44,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
 
   const [copied, setCopied] = useState(false);
   const [resumeLoading, setResumeLoading] = useState(false);
+  const hasAutoNavigatedRef = useRef(false);
 
   useEffect(() => {
     const initialize = async () => {
@@ -105,8 +106,8 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
     currentRoom.currentPlayerCount >= 2;
   const isGamePlaying = currentRoom?.status === "playing";
 
-  const handleResumeGame = async () => {
-    if (!currentRoom) return;
+  const handleResumeGame = useCallback(async (): Promise<boolean> => {
+    if (!currentRoom) return false;
 
     try {
       setResumeLoading(true);
@@ -124,12 +125,34 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
       }
 
       router.push(`/game/play/${sessionId}`);
+      return true;
     } catch (error) {
       console.error("Resume game error:", error);
+      return false;
     } finally {
       setResumeLoading(false);
     }
-  };
+  }, [currentRoom, currentSession?.id, getActiveSessionForRoom, loadGameState, router]);
+
+  useEffect(() => {
+    if (!currentRoom || currentRoom.status !== "playing") {
+      hasAutoNavigatedRef.current = false;
+      return;
+    }
+
+    if (hasAutoNavigatedRef.current) {
+      return;
+    }
+
+    hasAutoNavigatedRef.current = true;
+
+    void (async () => {
+      const success = await handleResumeGame();
+      if (!success) {
+        hasAutoNavigatedRef.current = false;
+      }
+    })();
+  }, [currentRoom, handleResumeGame]);
 
   if (!currentRoom) {
     return (
