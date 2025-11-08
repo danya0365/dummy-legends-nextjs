@@ -58,6 +58,84 @@ const isRoomDetailsContent = (value: unknown): value is RoomDetailsContent => {
   );
 };
 
+type DiscardValidationViolationType =
+  | "can_meld_immediately"
+  | "no_meld_before_knock"
+  | null;
+
+interface DiscardCardValidationDetails {
+  can_discard: boolean;
+  violation_type: DiscardValidationViolationType;
+  violation_message: string | null;
+  next_player_can_meld: boolean;
+  hand_count: number;
+  meld_count: number;
+}
+
+interface DiscardCardValidationResponse {
+  success: boolean;
+  error?: string | null;
+  validation?: DiscardCardValidationDetails | null;
+}
+
+const isDiscardValidationViolationType = (
+  value: unknown
+): value is DiscardValidationViolationType =>
+  value === null || value === "can_meld_immediately" || value === "no_meld_before_knock";
+
+const isDiscardCardValidationDetails = (
+  value: unknown
+): value is DiscardCardValidationDetails => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.can_discard === "boolean" &&
+    isDiscardValidationViolationType(record.violation_type) &&
+    (record.violation_message === null || typeof record.violation_message === "string") &&
+    typeof record.next_player_can_meld === "boolean" &&
+    typeof record.hand_count === "number" &&
+    typeof record.meld_count === "number"
+  );
+};
+
+const isDiscardCardValidationResponse = (
+  value: unknown
+): value is DiscardCardValidationResponse => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (typeof record.success !== "boolean") {
+    return false;
+  }
+
+  if (
+    "error" in record &&
+    record.error !== undefined &&
+    record.error !== null &&
+    typeof record.error !== "string"
+  ) {
+    return false;
+  }
+
+  if (
+    "validation" in record &&
+    record.validation !== undefined &&
+    record.validation !== null &&
+    !isDiscardCardValidationDetails(record.validation)
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
 const mapGameSessionRow = (session: GameSessionRow): GameSession => ({
   id: session.id,
   roomId: session.room_id,
@@ -315,6 +393,37 @@ interface DiscardRiskWarning {
   message?: string;
   canOverride?: boolean;
 }
+
+const mapDiscardValidationToWarning = (
+  validation: DiscardCardValidationDetails | null | undefined
+): DiscardRiskWarning | null => {
+  if (!validation) {
+    return null;
+  }
+
+  const rawMessage = validation.violation_message;
+  const isMessageKey = rawMessage?.startsWith("discard_rules.") ?? false;
+  const messageKey = isMessageKey ? rawMessage : null;
+  const fallbackMessage = !isMessageKey && rawMessage ? rawMessage : undefined;
+  const violationType = validation.violation_type ?? null;
+
+  if (!violationType && !messageKey && fallbackMessage === undefined) {
+    return {
+      riskType: null,
+      messageKey: null,
+      message: "ไม่สามารถทิ้งไพ่ได้",
+      canOverride: false,
+    };
+  }
+
+  return {
+    riskType: violationType,
+    messageKey,
+    message: fallbackMessage,
+    canOverride:
+      violationType === "can_meld_immediately" && validation.can_discard === false,
+  };
+};
 
 interface GameStore extends RoomState {
   gamerId: string | null;
@@ -2558,24 +2667,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       if (error) throw error;
 
-      // ตรวจสอบผลการ validate
-      // @ts-expect-error - response type จะถูก generate หลัง migration
-      if (data && !data.success) {
-        // @ts-expect-error - validation field ยังไม่มีใน generated types
-        const validation = data.validation;
-        const violationMessageKey = validation?.violation_message;
-        const errorMessage = violationMessageKey || "ไม่สามารถทิ้งไพ่ได้";
+      if (!data) {
+        throw new Error("Discard validation failed: empty response");
+      }
 
-        set({
-          error: errorMessage,
-          discardRiskWarning: {
-            riskType: validation?.violation_type,
-            messageKey: violationMessageKey,
-            message: violationMessageKey ? undefined : errorMessage,
-            canOverride: validation?.violation_type === "can_meld_immediately",
-          },
-        });
-        throw new Error(errorMessage);
+      if (!isDiscardCardValidationResponse(data)) {
+        throw new Error("Discard validation failed: invalid response structure");
+      }
+
+      const result: DiscardCardValidationResponse = data;
+
+      if (!result.success) {
+        const discardWarning = mapDiscardValidationToWarning(result.validation);
+
+        if (discardWarning) {
+          set({
+            discardRiskWarning: discardWarning,
+            error: null,
+          });
+        }
+
+        return;
       }
 
       // Reload game state
@@ -2593,7 +2705,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         },
       });
     } catch (error) {
-      console.error("Failed to discard card:", error);
       if (!get().discardRiskWarning) {
         set({
           error: error instanceof Error ? error.message : "ไม่สามารถทิ้งไพ่ได้",
