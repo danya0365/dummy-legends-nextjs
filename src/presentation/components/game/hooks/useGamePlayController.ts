@@ -689,7 +689,11 @@ export function useGamePlayController({
   const handleDiscard = useCallback(async () => {
     if (!selectedCardId || !actionAvailability.canDiscardCard) return;
     try {
-      await discardCard(selectedCardId, false);
+      const success = await discardCard(selectedCardId, false);
+      if (!success) {
+        return;
+      }
+
       setSelectedCardId(null);
       setHasDrawn(false);
       setGuidanceMessage(null);
@@ -702,7 +706,11 @@ export function useGamePlayController({
   const handleForceDiscard = useCallback(async () => {
     if (!selectedCardId) return;
     try {
-      await discardCard(selectedCardId, true);
+      const success = await discardCard(selectedCardId, true);
+      if (!success) {
+        return;
+      }
+
       setSelectedCardId(null);
       setHasDrawn(false);
       setGuidanceMessage(null);

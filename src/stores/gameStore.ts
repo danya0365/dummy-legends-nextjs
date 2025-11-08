@@ -524,7 +524,7 @@ interface GameStore extends RoomState {
   toggleLayoffCard: (cardId: string) => void;
   selectLayoffTarget: (meldId: string | null) => void;
   confirmLayoff: () => Promise<void>;
-  discardCard: (cardId: string, forceDiscard?: boolean) => Promise<void>;
+  discardCard: (cardId: string, forceDiscard?: boolean) => Promise<boolean>;
   sortHandByRank: () => Promise<void>;
   sortHandBySuit: () => Promise<void>;
   subscribeToGameSession: (sessionId: string) => Promise<void>;
@@ -2685,9 +2685,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
             discardRiskWarning: discardWarning,
             error: null,
           });
+
+          // ผู้ใช้ต้องกดยืนยันจาก UI เพื่อ force discard ผ่าน onConfirmRisk
         }
 
-        return;
+        return false;
       }
 
       // Reload game state
@@ -2704,6 +2706,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           context: {},
         },
       });
+
+      return true;
     } catch (error) {
       if (!get().discardRiskWarning) {
         set({

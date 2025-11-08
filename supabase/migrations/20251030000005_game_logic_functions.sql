@@ -1479,8 +1479,8 @@ DECLARE
   v_cards_to_collect UUID[] := '{}';
   v_cards_collected_count INTEGER := 0;
   v_selected_position INTEGER;
-  v_highest_discard_position INTEGER;
-  v_target_position INTEGER;
+  v_lowest_discard_position INTEGER;
+  v_collect_from_position INTEGER;
   v_card_to_collect UUID;
   rec_discard_card RECORD;
 BEGIN
@@ -1547,7 +1547,7 @@ BEGIN
     RAISE EXCEPTION 'Selected discard card must be included in meld';
   END IF;
 
-  -- หาตำแหน่งไพ่ในกองทิ้งและรวบรวมไพ่ทั้งหมดตั้งแต่ใบที่เลือกขึ้นไปด้านบน
+  -- หาตำแหน่งไพ่กองทิ้งที่เลือก
   SELECT position_in_location
   INTO v_selected_position
   FROM public.game_cards
@@ -1560,17 +1560,17 @@ BEGIN
     RAISE EXCEPTION 'Selected discard card is no longer available';
   END IF;
 
-  SELECT MAX(position_in_location)
-  INTO v_highest_discard_position
+  SELECT MIN(position_in_location)
+  INTO v_lowest_discard_position
   FROM public.game_cards
   WHERE session_id = p_session_id
     AND id = ANY(p_meld_cards)
     AND location = 'discard';
 
-  IF v_highest_discard_position IS NOT NULL THEN
-    v_target_position := GREATEST(v_selected_position, v_highest_discard_position);
+  IF v_lowest_discard_position IS NOT NULL THEN
+    v_collect_from_position := LEAST(v_selected_position, v_lowest_discard_position);
   ELSE
-    v_target_position := v_selected_position;
+    v_collect_from_position := v_selected_position;
   END IF;
 
   -- ยืนยันว่าไพ่ทั้งหมดสร้าง meld ได้จริง (ไพ่กองทิ้งต้องอยู่ในช่วงที่เก็บได้ และไพ่ที่เหลือต้องอยู่ในมือผู้เล่น)
@@ -1583,7 +1583,7 @@ BEGIN
     WHERE gc.id IS NULL
       OR NOT (
         (gc.location = 'hand' AND gc.owner_gamer_id = p_gamer_id)
-        OR (gc.location = 'discard' AND gc.position_in_location <= v_target_position)
+        OR (gc.location = 'discard' AND gc.position_in_location >= v_collect_from_position)
       )
   ) THEN
     RAISE EXCEPTION 'Meld contains cards not accessible to player';
@@ -1596,7 +1596,7 @@ BEGIN
     FROM public.game_cards
     WHERE session_id = p_session_id
       AND location = 'discard'
-      AND position_in_location <= v_target_position
+      AND position_in_location >= v_collect_from_position
     ORDER BY position_in_location
     FOR UPDATE
   LOOP
