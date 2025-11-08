@@ -63,3 +63,12 @@ CREATE POLICY "cards_select_guest_participants"
     auth.role() = 'anon'
     AND public.is_guest_participant_in_session(session_id)
   );
+
+-- Allow anon role to select game event logs for rooms that contain guest participants
+CREATE POLICY "event_logs_select_guest_participants"
+  ON public.game_event_logs FOR SELECT
+  USING (
+    auth.role() = 'anon'
+    AND public.is_guest_participant_in_room(room_id)
+  );
+
