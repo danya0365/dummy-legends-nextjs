@@ -12,8 +12,9 @@ import {
   Users as UsersIcon,
   RefreshCw,
   Info,
+  X,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { GameEventLogEntry } from "@/src/domain/types/gameplay.types";
 import type { EventParticipantLookup } from "./types";
 
@@ -308,6 +309,84 @@ const DetailValue = ({
   }
 };
 
+interface EventLogCardProps {
+  log: GameEventLogEntry;
+  participants: EventParticipantLookup;
+}
+
+function EventLogCard({ log, participants }: EventLogCardProps) {
+  const meta = EVENT_TYPE_META[log.eventType] ?? {
+    label: log.eventType,
+    icon: Activity,
+    tone: "text-gray-600",
+  };
+  const Icon = meta.icon;
+  const actorId = (() => {
+    const value = log.detail?.actor_gamer_id;
+    return typeof value === "string" ? value : null;
+  })();
+  const actorParticipant = resolveParticipantDisplay(participants, actorId);
+  const subjectParticipant = resolveParticipantDisplay(participants, log.gamerId);
+  const detailItems = buildDetailItems(log.detail ?? {}, new Set(["actor_gamer_id"]));
+
+  return (
+    <div className="relative pl-6">
+      <span className="absolute left-0 top-1.5 flex h-4 w-4 items-center justify-center">
+        <Icon className={cn("h-4 w-4", meta.tone)} />
+      </span>
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/40 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {meta.label}
+          </p>
+          <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 dark:bg-gray-800 px-2 py-0.5 font-medium text-gray-600 dark:text-gray-300">
+              <Info className="h-3 w-3" />#{log.eventOrder}
+            </span>
+            {formatTimestamp(log.createdAt)}
+          </span>
+        </div>
+        {log.description && (
+          <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{log.description}</p>
+        )}
+        {(actorParticipant || subjectParticipant) && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            {actorParticipant && (
+              <ParticipantChip title="ผู้กระทำ" participant={actorParticipant} tone="emerald" />
+            )}
+            {subjectParticipant && (
+              <ParticipantChip
+                title={actorParticipant ? "ผู้ได้รับผล" : "เกี่ยวข้อง"}
+                participant={subjectParticipant}
+                tone={actorParticipant ? "sky" : "purple"}
+              />
+            )}
+          </div>
+        )}
+        {detailItems.length > 0 ? (
+          <dl className="mt-3 grid gap-2 text-xs">
+            {detailItems.map((item) => (
+              <div
+                key={`${log.id}-${item.key}`}
+                className="flex flex-col gap-1 rounded-md border border-gray-100 dark:border-gray-800 bg-white/60 dark:bg-gray-900/60 p-2"
+              >
+                <dt className="font-medium text-gray-600 dark:text-gray-300">{item.label}</dt>
+                <dd>
+                  <DetailValue item={item} participants={participants} />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            ไม่มีข้อมูลเพิ่มเติมสำหรับเหตุการณ์นี้
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function GameEventTimeline({
   logs,
   isLoading,
@@ -318,25 +397,40 @@ export function GameEventTimeline({
   const sortedLogs = useMemo(() => {
     return [...logs].sort((a, b) => a.eventOrder - b.eventOrder);
   }, [logs]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const latestLog = sortedLogs.at(-1) ?? null;
+  const displayLogs = latestLog ? [latestLog] : [];
+  const totalLogs = sortedLogs.length;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 h-full flex flex-col">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
           <h3 className="font-semibold text-gray-900 dark:text-gray-100">บันทึกเหตุการณ์</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             เก็บทุกการกระทำสำคัญของเกมรอบนี้
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={isLoading}
-          className="flex items-center gap-2 rounded-lg bg-gray-100 dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-          รีเฟรช
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsHistoryOpen(true)}
+            disabled={totalLogs === 0}
+            className="flex items-center gap-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 px-3 py-1.5 text-sm font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            ดูทั้งหมด
+            {totalLogs > 0 && <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs">{totalLogs}</span>}
+          </button>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="flex items-center gap-2 rounded-lg bg-gray-100 dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+            รีเฟรช
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -346,97 +440,39 @@ export function GameEventTimeline({
       )}
 
       <div className="mt-4 flex-1 overflow-y-auto pr-1">
-        {isLoading && sortedLogs.length === 0 ? (
+        {isLoading && totalLogs === 0 ? (
           <EmptyState message="กำลังโหลดบันทึก..." />
-        ) : sortedLogs.length === 0 ? (
+        ) : totalLogs === 0 ? (
           <EmptyState message="ยังไม่มีบันทึกในรอบนี้" />
         ) : (
-          <ul className="space-y-4">
-            {sortedLogs.map((log) => {
-              const meta = EVENT_TYPE_META[log.eventType] ?? {
-                label: log.eventType,
-                icon: Activity,
-                tone: "text-gray-600",
-              };
-              const Icon = meta.icon;
-              const actorId = (() => {
-                const value = log.detail?.actor_gamer_id;
-                return typeof value === "string" ? value : null;
-              })();
-              const actorParticipant = resolveParticipantDisplay(participants, actorId);
-              const subjectParticipant = resolveParticipantDisplay(participants, log.gamerId);
-
-              const detailItems = buildDetailItems(log.detail ?? {}, new Set(["actor_gamer_id"]));
-
-              return (
-                <li key={log.id} className="relative pl-6">
-                  <span className="absolute left-0 top-1.5 flex h-4 w-4 items-center justify-center">
-                    <Icon className={cn("h-4 w-4", meta.tone)} />
-                  </span>
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/40 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {meta.label}
-                      </p>
-                      <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 dark:bg-gray-800 px-2 py-0.5 font-medium text-gray-600 dark:text-gray-300">
-                          <Info className="h-3 w-3" />#{log.eventOrder}
-                        </span>
-                        {formatTimestamp(log.createdAt)}
-                      </span>
-                    </div>
-                    {log.description && (
-                      <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-                        {log.description}
-                      </p>
-                    )}
-                    {(actorParticipant || subjectParticipant) && (
-                      <div className="mt-3 flex flex-wrap items-center gap-3">
-                        {actorParticipant && (
-                          <ParticipantChip
-                            title="ผู้กระทำ"
-                            participant={actorParticipant}
-                            tone="emerald"
-                          />
-                        )}
-                        {subjectParticipant && (
-                          <ParticipantChip
-                            title={actorParticipant ? "ผู้ได้รับผล" : "เกี่ยวข้อง"}
-                            participant={subjectParticipant}
-                            tone={actorParticipant ? "sky" : "purple"}
-                          />
-                        )}
-                      </div>
-                    )}
-                    {detailItems.length > 0 && (
-                      <dl className="mt-3 grid gap-2 text-xs">
-                        {detailItems.map((item) => (
-                          <div
-                            key={`${log.id}-${item.key}`}
-                            className="flex flex-col gap-1 rounded-md border border-gray-100 dark:border-gray-800 bg-white/60 dark:bg-gray-900/60 p-2"
-                          >
-                            <dt className="font-medium text-gray-600 dark:text-gray-300">
-                              {item.label}
-                            </dt>
-                            <dd>
-                              <DetailValue item={item} participants={participants} />
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    )}
-                    {detailItems.length === 0 && (
-                      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                        ไม่มีข้อมูลเพิ่มเติมสำหรับเหตุการณ์นี้
-                      </p>
-                    )}
-                  </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+              <span>เหตุการณ์ล่าสุด</span>
+              {totalLogs > 1 && (
+                <span>
+                  แสดง 1 จาก <span className="font-semibold text-gray-700 dark:text-gray-200">{totalLogs}</span> เหตุการณ์
+                </span>
+              )}
+            </div>
+            <ul className="space-y-4">
+              {displayLogs.map((log) => (
+                <li key={log.id} className="list-none">
+                  <EventLogCard log={log} participants={participants} />
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
+
+      <GameEventHistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        logs={sortedLogs}
+        participants={participants}
+        onRefresh={onRefresh}
+        isLoading={isLoading}
+      />
     </div>
   );
 }
@@ -445,6 +481,75 @@ function EmptyState({ message }: { message: string }) {
   return (
     <div className="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
       {message}
+    </div>
+  );
+}
+
+interface GameEventHistoryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  logs: GameEventLogEntry[];
+  participants: EventParticipantLookup;
+  onRefresh: () => void;
+  isLoading: boolean;
+}
+
+function GameEventHistoryModal({
+  isOpen,
+  onClose,
+  logs,
+  participants,
+  onRefresh,
+  isLoading,
+}: GameEventHistoryModalProps) {
+  const orderedLogs = useMemo(() => {
+    return [...logs].sort((a, b) => b.eventOrder - a.eventOrder);
+  }, [logs]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="relative max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white dark:bg-gray-900 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 px-5 py-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">บันทึกเหตุการณ์ทั้งหมด</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              มีทั้งหมด {orderedLogs.length} เหตุการณ์
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="flex items-center gap-2 rounded-lg bg-gray-100 dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+              รีเฟรช
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full bg-gray-100 dark:bg-gray-800 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="h-[70vh] overflow-y-auto px-5 py-4">
+          {orderedLogs.length === 0 ? (
+            <EmptyState message="ยังไม่มีบันทึกในรอบนี้" />
+          ) : (
+            <div className="space-y-4">
+              {orderedLogs.map((log) => (
+                <EventLogCard key={log.id} log={log} participants={participants} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
