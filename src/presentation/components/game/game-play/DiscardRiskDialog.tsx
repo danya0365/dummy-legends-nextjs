@@ -1,7 +1,6 @@
 "use client";
 
 import { ShieldAlert, X } from "lucide-react";
-import { useEffect } from "react";
 
 export interface DiscardRiskWarning {
   riskType: "can_meld_immediately" | "no_meld_before_knock" | "general" | null;
@@ -31,22 +30,13 @@ export function DiscardRiskDialog({
   onDismiss,
   onConfirmRisk,
 }: DiscardRiskDialogProps) {
-  useEffect(() => {
-    if (warning) {
-      // Auto close after 5 seconds
-      const timer = setTimeout(() => {
-        onDismiss();
-      }, 5000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [warning, onDismiss]);
-
   if (!warning) return null;
 
   const resolvedMessage =
     warning.message ??
-    (warning.messageKey ? DISCARD_RISK_MESSAGE_MAP[warning.messageKey] : null) ??
+    (warning.messageKey
+      ? DISCARD_RISK_MESSAGE_MAP[warning.messageKey]
+      : null) ??
     DEFAULT_DISCARD_RISK_MESSAGE;
 
   return (
@@ -77,7 +67,8 @@ export function DiscardRiskDialog({
           {warning.riskType === "can_meld_immediately" && (
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
               <p className="text-sm text-amber-800 dark:text-amber-200">
-                <strong>ข้อควรระวัง:</strong> คู่แข่งอาจนำไพ่ใบนี้ไปเกิดได้ทันที ลองพิจารณาทิ้งไพ่ใบอื่นแทน
+                <strong>ข้อควรระวัง:</strong> คู่แข่งอาจนำไพ่ใบนี้ไปเกิดได้ทันที
+                ลองพิจารณาทิ้งไพ่ใบอื่นแทน
               </p>
             </div>
           )}
@@ -85,7 +76,8 @@ export function DiscardRiskDialog({
           {warning.riskType === "no_meld_before_knock" && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
               <p className="text-sm text-blue-800 dark:text-blue-200">
-                <strong>คำแนะนำ:</strong> ควรเกิดไพ่ให้ครบตามกติกาก่อนทิ้งหรือเตรียมตัวน็อก
+                <strong>คำแนะนำ:</strong>{" "}
+                ควรเกิดไพ่ให้ครบตามกติกาก่อนทิ้งหรือเตรียมตัวน็อก
               </p>
             </div>
           )}
@@ -94,7 +86,8 @@ export function DiscardRiskDialog({
           {warning.riskType === "general" && (
             <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-4">
               <p className="text-sm text-gray-700 dark:text-gray-300">
-                <strong>หมายเหตุ:</strong> การทิ้งไพ่ใบนี้อาจเปิดโอกาสให้คู่แข่งได้เปรียบ
+                <strong>หมายเหตุ:</strong>{" "}
+                การทิ้งไพ่ใบนี้อาจเปิดโอกาสให้คู่แข่งได้เปรียบ
               </p>
             </div>
           )}
