@@ -15,7 +15,7 @@ import { useState } from "react";
 import { CardBack, PlayingCard } from "../PlayingCard";
 import { DiscardStack } from "./DiscardStack";
 import { GamePlayLayoutProps } from "./types";
-import { ValidationErrorDialog } from "./ValidationErrorDialog";
+import { DiscardRiskDialog } from "./DiscardRiskDialog";
 import { GameRulesPanel } from "./GameRulesPanel";
 import { GameRuleTooltip, GAME_RULE_TOOLTIPS } from "./GameRuleTooltip";
 import { GameEventTimeline } from "./GameEventTimeline";
@@ -82,11 +82,11 @@ export function GamePlaySimpleView({
   onSelectLayoffTarget,
   onDiscard,
   onForceDiscard,
-  onClearValidationError,
+  onClearDiscardRisk,
   onRefresh,
   onSortHandByRank,
   onSortHandBySuit,
-  validationError,
+  discardRiskWarning,
   gameEventLogs,
   isLoadingEventLogs,
   eventLogError,
@@ -727,11 +727,11 @@ export function GamePlaySimpleView({
         </div>
       </div>
 
-      {/* Validation Error Dialog */}
-      <ValidationErrorDialog
-        error={validationError}
-        onClose={onClearValidationError}
-        onForceAction={onForceDiscard}
+      {/* Discard Risk Warning Dialog */}
+      <DiscardRiskDialog
+        warning={discardRiskWarning}
+        onDismiss={onClearDiscardRisk}
+        onConfirmRisk={onForceDiscard}
       />
 
       {/* Game Rules Panel */}

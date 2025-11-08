@@ -48,7 +48,7 @@ BEGIN
     IF v_can_next_player_meld THEN
       v_can_discard := false;
       v_violation_type := 'can_meld_immediately';
-      v_violation_message := 'ไม่สามารถทิ้งไพ่ที่ผู้เล่นถัดไปสามารถเกิดได้ทันที';
+      v_violation_message := 'discard_rules.can_meld_immediately';
     END IF;
   END IF;
 
@@ -56,7 +56,7 @@ BEGIN
   IF v_player_hand_count = 1 AND v_player_meld_count = 0 THEN
     v_can_discard := false;
     v_violation_type := 'no_meld_before_knock';
-    v_violation_message := 'ต้องเกิดไพ่อย่างน้อย 1 กองก่อนน็อก';
+    v_violation_message := 'discard_rules.no_meld_before_knock';
   END IF;
 
   RETURN jsonb_build_object(

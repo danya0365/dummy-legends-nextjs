@@ -309,10 +309,11 @@ const mapRoomDetailsToGameRoom = (details: RoomDetailsContent): GameRoom => {
   };
 };
 
-interface ValidationError {
-  type: string | null;
-  message: string;
-  canForce?: boolean;
+interface DiscardRiskWarning {
+  riskType: "can_meld_immediately" | "no_meld_before_knock" | "general" | null;
+  messageKey?: string | null;
+  message?: string;
+  canOverride?: boolean;
 }
 
 interface GameStore extends RoomState {
@@ -324,7 +325,7 @@ interface GameStore extends RoomState {
   gamerProfileForm: GamerProfileFormState;
   isGamerProfileModalOpen: boolean;
   isSavingGamerProfile: boolean;
-  validationError: ValidationError | null;
+  discardRiskWarning: DiscardRiskWarning | null;
 
   // Meld selection state
   pendingMeldCardIds: string[];
@@ -449,7 +450,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isInRoom: false,
   isLoading: false,
   error: null,
-  validationError: null,
+  discardRiskWarning: null,
   gamerId: null,
   guestId: null,
   roomChannel: null,
@@ -2562,15 +2563,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (data && !data.success) {
         // @ts-expect-error - validation field ยังไม่มีใน generated types
         const validation = data.validation;
-        const errorMessage =
-          validation?.violation_message || "ไม่สามารถทิ้งไพ่ได้";
+        const violationMessageKey = validation?.violation_message;
+        const errorMessage = violationMessageKey || "ไม่สามารถทิ้งไพ่ได้";
 
         set({
           error: errorMessage,
-          validationError: {
-            type: validation?.violation_type,
-            message: errorMessage,
-            canForce: validation?.violation_type === "can_meld_immediately",
+          discardRiskWarning: {
+            riskType: validation?.violation_type,
+            messageKey: violationMessageKey,
+            message: violationMessageKey ? undefined : errorMessage,
+            canOverride: validation?.violation_type === "can_meld_immediately",
           },
         });
         throw new Error(errorMessage);
@@ -2583,7 +2585,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         isSelectingMeld: false,
         selectedDiscardCardId: null,
         hasDrawnThisTurn: false,
-        validationError: null,
+        discardRiskWarning: null,
         turnActionState: {
           mode: "idle",
           allowedActions: [],
@@ -2592,7 +2594,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
     } catch (error) {
       console.error("Failed to discard card:", error);
-      if (!get().validationError) {
+      if (!get().discardRiskWarning) {
         set({
           error: error instanceof Error ? error.message : "ไม่สามารถทิ้งไพ่ได้",
         });

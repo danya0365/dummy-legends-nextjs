@@ -76,10 +76,11 @@ export interface GamePlayLayoutProps {
   selectedLayoffMeldId: string | null;
   isLoading: boolean;
   error: string | null;
-  validationError: {
-    type: string | null;
-    message: string;
-    canForce?: boolean;
+  discardRiskWarning: {
+    riskType: "can_meld_immediately" | "no_meld_before_knock" | "general" | null;
+    messageKey?: string | null;
+    message?: string;
+    canOverride?: boolean;
   } | null;
   currentTurnPlayerName: string;
   turnActionMode: TurnActionMode;
@@ -115,7 +116,7 @@ export interface GamePlayLayoutProps {
   onSelectLayoffTarget: (meldId: string | null) => void;
   onDiscard: () => void;
   onForceDiscard: () => void;
-  onClearValidationError: () => void;
+  onClearDiscardRisk: () => void;
   onRefresh: () => void;
   onSortHandByRank: () => void;
   onSortHandBySuit: () => void;

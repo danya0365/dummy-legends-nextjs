@@ -67,7 +67,7 @@ export function useGamePlayController({
     unsubscribeFromGame,
     isLoading,
     error,
-    validationError,
+    discardRiskWarning,
     loadGameResultSummaryForRoom,
     turnActionState,
     hasDrawnThisTurn,
@@ -695,7 +695,7 @@ export function useGamePlayController({
       setGuidanceMessage(null);
     } catch (error) {
       console.error("Discard error:", error);
-      // Error message จะถูกจัดการโดย validationError
+      // ความเสี่ยงจะถูกจัดการแยกโดย discardRiskWarning ใน store
     }
   }, [actionAvailability.canDiscardCard, discardCard, selectedCardId]);
 
@@ -711,8 +711,8 @@ export function useGamePlayController({
     }
   }, [discardCard, selectedCardId]);
 
-  const handleClearValidationError = useCallback(() => {
-    useGameStore.setState({ validationError: null });
+  const handleClearDiscardRisk = useCallback(() => {
+    useGameStore.setState({ discardRiskWarning: null });
   }, []);
 
   const currentTurnPlayer = otherPlayersWithDetails.find(
@@ -822,7 +822,6 @@ export function useGamePlayController({
     selectedLayoffMeldId: targetMeldId,
     isLoading,
     error,
-    validationError,
     currentTurnPlayerName,
     turnActionMode: turnActionState.mode,
     turnActionAllowedActions: turnActionState.allowedActions,
@@ -844,7 +843,7 @@ export function useGamePlayController({
     onSelectLayoffTarget: handleSelectLayoffTarget,
     onDiscard: handleDiscard,
     onForceDiscard: handleForceDiscard,
-    onClearValidationError: handleClearValidationError,
+    onClearDiscardRisk: handleClearDiscardRisk,
     onRefresh: handleRefresh,
     onSortHandByRank: sortHandByRank,
     onSortHandBySuit: sortHandBySuit,
@@ -853,6 +852,7 @@ export function useGamePlayController({
     eventLogError,
     onRefreshEventLogs: handleRefreshEventLogs,
     eventParticipants,
+    discardRiskWarning,
   };
 
   return {
