@@ -8,6 +8,8 @@ import type {
 } from "@/src/domain/types/gameplay.types";
 import { useGameStore } from "@/src/stores/gameStore";
 import type {
+  EventParticipantInfo,
+  EventParticipantLookup,
   GamePlayLayoutProps,
   GamePlayViewTheme,
 } from "../game-play/types";
@@ -178,6 +180,74 @@ export function useGamePlayController({
       };
     });
   }, [currentRoom?.players, otherPlayers]);
+
+  const eventParticipants = useMemo<EventParticipantLookup>(() => {
+    const participantMap = new Map<string, EventParticipantInfo>();
+
+    const ensureParticipant = (
+      id: string | null | undefined,
+      info?: Partial<EventParticipantInfo>
+    ) => {
+      if (!id) return;
+      if (participantMap.has(id)) return;
+
+      const isSelf = info?.isSelf ?? id === gamerId;
+      participantMap.set(id, {
+        displayName:
+          info?.displayName ?? (isSelf ? "คุณ" : `ผู้เล่น ${id.slice(0, 4)}`),
+        avatarUrl: info?.avatarUrl ?? null,
+        isSelf,
+      });
+    };
+
+    (currentRoom?.players ?? []).forEach((player) => {
+      ensureParticipant(player.userId, {
+        displayName:
+          player.displayName ||
+          player.username ||
+          (player.userId === gamerId
+            ? "คุณ"
+            : `ผู้เล่น ${player.userId.slice(0, 4)}`),
+        avatarUrl: player.avatar,
+        isSelf: player.userId === gamerId,
+      });
+    });
+
+    otherPlayersWithDetails.forEach((player) => {
+      ensureParticipant(player.gamerId, {
+        displayName: player.displayName,
+        avatarUrl: player.avatar,
+        isSelf: player.gamerId === gamerId,
+      });
+    });
+
+    const participantDetailKeys = new Set([
+      "target_owner",
+      "next_player_id",
+    ]);
+
+    gameEventLogs.forEach((log) => {
+      ensureParticipant(log.gamerId);
+
+      const detail = log.detail ?? {};
+      Object.entries(detail).forEach(([key, value]) => {
+        if (typeof value !== "string") return;
+        if (
+          key.endsWith("_gamer_id") ||
+          key.endsWith("_player_id") ||
+          participantDetailKeys.has(key)
+        ) {
+          ensureParticipant(value);
+        }
+      });
+    });
+
+    if (gamerId) {
+      ensureParticipant(gamerId, { displayName: "คุณ", isSelf: true });
+    }
+
+    return Object.fromEntries(participantMap.entries());
+  }, [currentRoom, otherPlayersWithDetails, gameEventLogs, gamerId]);
 
   const isMyTurn = currentSession?.currentTurnGamerId === gamerId;
 
@@ -782,6 +852,7 @@ export function useGamePlayController({
     isLoadingEventLogs,
     eventLogError,
     onRefreshEventLogs: handleRefreshEventLogs,
+    eventParticipants,
   };
 
   return {

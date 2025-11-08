@@ -615,10 +615,10 @@ BEGIN
     RAISE EXCEPTION 'Not authorized to view event logs';
   END IF;
 
-  SELECT room_id
+  SELECT gs.room_id
   INTO v_room_id
-  FROM public.game_sessions
-  WHERE id = p_session_id;
+  FROM public.game_sessions gs
+  WHERE gs.id = p_session_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Game session not found';

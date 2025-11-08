@@ -91,6 +91,7 @@ export function GamePlaySimpleView({
   isLoadingEventLogs,
   eventLogError,
   onRefreshEventLogs,
+  eventParticipants,
 }: GamePlayLayoutProps) {
   void _turnActionContext;
   const [isRulesPanelOpen, setIsRulesPanelOpen] = useState(false);
@@ -434,6 +435,7 @@ export function GamePlaySimpleView({
               isLoading={isLoadingEventLogs}
               error={eventLogError}
               onRefresh={onRefreshEventLogs}
+              participants={eventParticipants}
             />
           </div>
         </div>

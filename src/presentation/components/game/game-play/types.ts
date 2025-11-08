@@ -23,6 +23,14 @@ export enum GamePlayViewTheme {
   Theme1,
 }
 
+export interface EventParticipantInfo {
+  displayName: string;
+  avatarUrl?: string | null;
+  isSelf?: boolean;
+}
+
+export type EventParticipantLookup = Record<string, EventParticipantInfo>;
+
 export interface GamePlayLayoutProps {
   currentRoom: GameRoom | null;
   currentSession: GameSession;
@@ -115,4 +123,5 @@ export interface GamePlayLayoutProps {
   isLoadingEventLogs: boolean;
   eventLogError: string | null;
   onRefreshEventLogs: () => void;
+  eventParticipants: EventParticipantLookup;
 }
