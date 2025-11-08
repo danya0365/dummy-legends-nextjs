@@ -82,6 +82,64 @@ export type Database = {
           },
         ]
       }
+      game_event_logs: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          detail: Json
+          event_order: number
+          event_type: Database["public"]["Enums"]["game_event_type"]
+          gamer_id: string | null
+          id: string
+          room_id: string
+          session_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          detail?: Json
+          event_order: number
+          event_type: Database["public"]["Enums"]["game_event_type"]
+          gamer_id?: string | null
+          id?: string
+          room_id: string
+          session_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          detail?: Json
+          event_order?: number
+          event_type?: Database["public"]["Enums"]["game_event_type"]
+          gamer_id?: string | null
+          id?: string
+          room_id?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_event_logs_gamer_id_fkey"
+            columns: ["gamer_id"]
+            isOneToOne: false
+            referencedRelation: "gamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_event_logs_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_event_logs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       game_hands: {
         Row: {
           card_count: number
@@ -1086,6 +1144,26 @@ export type Database = {
         Args: { p_rank: Database["public"]["Enums"]["card_rank"] }
         Returns: number
       }
+      get_game_event_logs: {
+        Args: {
+          p_session_id: string
+          p_gamer_id: string
+          p_guest_identifier?: string
+          p_limit?: number
+          p_offset?: number
+        }
+        Returns: {
+          id: string
+          session_id: string
+          room_id: string
+          gamer_id: string
+          event_type: Database["public"]["Enums"]["game_event_type"]
+          event_order: number
+          description: string
+          detail: Json
+          created_at: string
+        }[]
+      }
       get_game_result_summary: {
         Args: {
           p_session_id: string
@@ -1221,6 +1299,18 @@ export type Database = {
         Args: { p_guest_identifier: string; p_profile_id: string }
         Returns: boolean
       }
+      log_game_event: {
+        Args: {
+          p_session_id: string
+          p_actor_gamer_id: string
+          p_event_type: Database["public"]["Enums"]["game_event_type"]
+          p_description?: string
+          p_detail?: Json
+          p_target_gamer_id?: string
+          p_guest_identifier?: string
+        }
+        Returns: string
+      }
       migrate_profile_roles: {
         Args: Record<PropertyKey, never>
         Returns: undefined
@@ -1310,6 +1400,23 @@ export type Database = {
         | "Q"
         | "K"
       card_suit: "hearts" | "diamonds" | "clubs" | "spades"
+      game_event_type:
+        | "session_started"
+        | "turn_started"
+        | "draw_deck"
+        | "draw_discard"
+        | "discard"
+        | "create_meld"
+        | "layoff"
+        | "knock"
+        | "gin"
+        | "dummy_finish"
+        | "penalty_dummy"
+        | "penalty_head"
+        | "penalty_full"
+        | "penalty_spe_to"
+        | "penalty_foolish"
+        | "system_notification"
       game_mode: "casual" | "ranked" | "tournament" | "private"
       game_move_type:
         | "draw_deck"
@@ -1470,6 +1577,24 @@ export const Constants = {
         "K",
       ],
       card_suit: ["hearts", "diamonds", "clubs", "spades"],
+      game_event_type: [
+        "session_started",
+        "turn_started",
+        "draw_deck",
+        "draw_discard",
+        "discard",
+        "create_meld",
+        "layoff",
+        "knock",
+        "gin",
+        "dummy_finish",
+        "penalty_dummy",
+        "penalty_head",
+        "penalty_full",
+        "penalty_spe_to",
+        "penalty_foolish",
+        "system_notification",
+      ],
       game_mode: ["casual", "ranked", "tournament", "private"],
       game_move_type: [
         "draw_deck",

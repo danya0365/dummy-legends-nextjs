@@ -170,6 +170,18 @@ export interface GameScoreEventEntry {
   createdAt: string | null;
 }
 
+export interface GameEventLogEntry {
+  id: string;
+  sessionId: string;
+  roomId: string;
+  gamerId: string | null;
+  eventType: Database["public"]["Enums"]["game_event_type"];
+  eventOrder: number;
+  description: string | null;
+  detail: Record<string, unknown>;
+  createdAt: string | null;
+}
+
 export interface GameResultMeld {
   id: string;
   sessionId: string;

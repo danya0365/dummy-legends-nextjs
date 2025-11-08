@@ -8,6 +8,7 @@ import type {
   TurnActionMode,
   TurnActionPermission,
   TurnActionContext,
+  GameEventLogEntry,
 } from "@/src/domain/types/gameplay.types";
 import type { GameRoom } from "@/src/domain/types/game.types";
 
@@ -110,4 +111,8 @@ export interface GamePlayLayoutProps {
   onRefresh: () => void;
   onSortHandByRank: () => void;
   onSortHandBySuit: () => void;
+  gameEventLogs: GameEventLogEntry[];
+  isLoadingEventLogs: boolean;
+  eventLogError: string | null;
+  onRefreshEventLogs: () => void;
 }

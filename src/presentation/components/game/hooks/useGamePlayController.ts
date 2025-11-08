@@ -69,6 +69,10 @@ export function useGamePlayController({
     loadGameResultSummaryForRoom,
     turnActionState,
     hasDrawnThisTurn,
+    gameEventLogs,
+    isLoadingEventLogs,
+    eventLogError,
+    loadGameEventLogs,
   } = useGameStore();
 
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -654,6 +658,11 @@ export function useGamePlayController({
     return loadGameState(sessionId);
   }, [loadGameState, sessionId]);
 
+  const handleRefreshEventLogs = useCallback(() => {
+    if (!currentSession?.id) return;
+    void loadGameEventLogs(currentSession.id, { limit: 200 });
+  }, [currentSession?.id, loadGameEventLogs]);
+
   const hasNavigatedToResult = useRef(false);
 
   useEffect(() => {
@@ -769,6 +778,10 @@ export function useGamePlayController({
     onRefresh: handleRefresh,
     onSortHandByRank: sortHandByRank,
     onSortHandBySuit: sortHandBySuit,
+    gameEventLogs,
+    isLoadingEventLogs,
+    eventLogError,
+    onRefreshEventLogs: handleRefreshEventLogs,
   };
 
   return {

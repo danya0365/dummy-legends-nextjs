@@ -15,6 +15,7 @@ import type {
   DiscardStackInfo,
   GameCard,
   GameCardRow,
+  GameEventLogEntry,
   GameMeldRow,
   GameResultMeld,
   GameResultPlayerRow,
@@ -106,6 +107,48 @@ const mapTableMeld = (meld: {
   ownerGamerId: meld.owner_gamer_id,
   createdAt: meld.created_at ?? null,
   cards: meld.cards.map(mapGameCardRow),
+});
+
+type GameEventLogRowPayload = {
+  id: string;
+  session_id: string;
+  room_id: string;
+  gamer_id: string | null;
+  event_type: string;
+  event_order: number;
+  description: string | null;
+  detail: Json | null;
+  created_at: string | null;
+};
+
+const normalizeEventDetail = (
+  detail: Json | null | undefined
+): Record<string, unknown> => {
+  if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+    return detail as Record<string, unknown>;
+  }
+
+  if (
+    typeof detail === "string" ||
+    typeof detail === "number" ||
+    typeof detail === "boolean"
+  ) {
+    return { value: detail };
+  }
+
+  return {};
+};
+
+const mapGameEventLogRow = (row: GameEventLogRowPayload): GameEventLogEntry => ({
+  id: row.id,
+  sessionId: row.session_id,
+  roomId: row.room_id,
+  gamerId: row.gamer_id,
+  eventType: row.event_type as GameEventLogEntry["eventType"],
+  eventOrder: row.event_order,
+  description: row.description,
+  detail: normalizeEventDetail(row.detail),
+  createdAt: row.created_at,
 });
 
 const mapOtherPlayerSummary = (
@@ -311,6 +354,11 @@ interface GameStore extends RoomState {
   isLoadingResultSummary: boolean;
   resultSummaryError: string | null;
 
+  // Game event logs
+  gameEventLogs: GameEventLogEntry[];
+  isLoadingEventLogs: boolean;
+  eventLogError: string | null;
+
   // Actions - Room
   initializeGamer: () => Promise<void>;
   createRoom: (data: CreateRoomData) => Promise<GameRoom>;
@@ -373,6 +421,10 @@ interface GameStore extends RoomState {
   loadGameResultSummary: (sessionId: string) => Promise<void>;
   loadGameResultSummaryForRoom: (roomId: string) => Promise<void>;
   resetGameResultSummary: () => void;
+  loadGameEventLogs: (
+    sessionId: string,
+    options?: { limit?: number; offset?: number; silent?: boolean }
+  ) => Promise<void>;
 }
 
 /**
@@ -439,6 +491,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   gameScoreEvents: [],
   isLoadingResultSummary: false,
   resultSummaryError: null,
+
+  gameEventLogs: [],
+  isLoadingEventLogs: false,
+  eventLogError: null,
 
   /**
    * Subscribe to lobby updates
@@ -1728,6 +1784,63 @@ export const useGameStore = create<GameStore>((set, get) => ({
       resultSummaryError: null,
     });
   },
+  loadGameEventLogs: async (
+    sessionId: string,
+    options?: { limit?: number; offset?: number; silent?: boolean }
+  ) => {
+    const { limit = 200, offset = 0, silent = false } = options ?? {};
+
+    if (!silent) {
+      set({ isLoadingEventLogs: true, eventLogError: null });
+    } else {
+      set((state) => (state.eventLogError ? { eventLogError: null } : state));
+    }
+
+    try {
+      const state = get();
+      let gamerId = state.gamerId;
+      const guestId = state.guestId;
+
+      if (!gamerId) {
+        await get().initializeGamer();
+        gamerId = get().gamerId;
+      }
+
+      if (!gamerId) {
+        throw new Error("ไม่สามารถระบุผู้เล่นได้");
+      }
+
+      const { data, error } = await supabase.rpc("get_game_event_logs", {
+        p_session_id: sessionId,
+        p_gamer_id: gamerId,
+        p_guest_identifier: guestId || undefined,
+        p_limit: limit,
+        p_offset: offset,
+      });
+
+      if (error) throw error;
+
+      const rows = Array.isArray(data)
+        ? (data as GameEventLogRowPayload[])
+        : [];
+      const logs = rows.map(mapGameEventLogRow);
+
+      set((state) => ({
+        gameEventLogs: logs,
+        eventLogError: null,
+        isLoadingEventLogs: silent ? state.isLoadingEventLogs : false,
+      }));
+    } catch (error) {
+      console.error("Failed to load game event logs:", error);
+      set((state) => ({
+        eventLogError:
+          error instanceof Error
+            ? error.message
+            : "ไม่สามารถโหลดบันทึกเหตุการณ์ได้",
+        isLoadingEventLogs: silent ? state.isLoadingEventLogs : false,
+      }));
+    }
+  },
 
   /**
    * Subscribe to room updates via Realtime
@@ -1958,6 +2071,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hasDrawnThisTurn: hasDrawn,
         turnActionState: nextTurnState,
       });
+
+      if (session) {
+        void get().loadGameEventLogs(session.id, { limit: 200, silent: true });
+      } else {
+        set({ gameEventLogs: [], eventLogError: null });
+      }
     } catch (error) {
       console.error("Failed to load game state:", error);
       set({ error: "ไม่สามารถโหลดสถานะเกมได้" });
@@ -2518,6 +2637,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
    */
   subscribeToGameSession: async (sessionId: string) => {
     let reloadTimeout: ReturnType<typeof setTimeout> | null = null;
+    let eventLogReloadTimeout: ReturnType<typeof setTimeout> | null = null;
     const scheduleReload = () => {
       if (reloadTimeout) {
         clearTimeout(reloadTimeout);
@@ -2527,6 +2647,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
         get().loadGameState(sessionId);
         reloadTimeout = null;
       }, 100);
+    };
+
+    const scheduleEventLogReload = () => {
+      if (eventLogReloadTimeout) {
+        clearTimeout(eventLogReloadTimeout);
+      }
+
+      eventLogReloadTimeout = setTimeout(() => {
+        void get().loadGameEventLogs(sessionId, { limit: 200, silent: true });
+        eventLogReloadTimeout = null;
+      }, 150);
     };
 
     const channel = supabase
@@ -2550,6 +2681,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
           filter: `id=eq.${sessionId}`,
         },
         scheduleReload
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "game_event_logs",
+          filter: `session_id=eq.${sessionId}`,
+        },
+        scheduleEventLogReload
       )
       .subscribe((status) => {
         console.log("Game session subscription response:", status);

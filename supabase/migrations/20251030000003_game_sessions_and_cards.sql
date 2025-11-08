@@ -116,6 +116,28 @@ CREATE TABLE IF NOT EXISTS public.game_moves (
 );
 
 -- =====================================================
+-- GAME EVENT LOGS TABLE
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS public.game_event_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+  session_id UUID NOT NULL REFERENCES public.game_sessions(id) ON DELETE CASCADE,
+  room_id UUID NOT NULL REFERENCES public.game_rooms(id) ON DELETE CASCADE,
+  gamer_id UUID REFERENCES public.gamers(id) ON DELETE SET NULL,
+
+  event_type public.game_event_type NOT NULL,
+  event_order BIGINT NOT NULL,
+
+  description TEXT,
+  detail JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  CONSTRAINT game_event_logs_session_order UNIQUE (session_id, event_order)
+);
+
+-- =====================================================
 -- GAME RESULTS TABLE
 -- =====================================================
 
@@ -225,6 +247,9 @@ CREATE INDEX idx_game_cards_meld ON public.game_cards(meld_id);
 CREATE INDEX idx_game_melds_session ON public.game_melds(session_id);
 CREATE INDEX idx_game_score_events_session ON public.game_score_events(session_id);
 CREATE INDEX idx_game_score_events_gamer ON public.game_score_events(gamer_id);
+CREATE INDEX idx_game_event_logs_session ON public.game_event_logs(session_id);
+CREATE INDEX idx_game_event_logs_room ON public.game_event_logs(room_id);
+CREATE INDEX idx_game_event_logs_type ON public.game_event_logs(event_type);
 CREATE INDEX idx_game_result_players_result ON public.game_result_players(result_id);
 CREATE INDEX idx_game_moves_session ON public.game_moves(session_id);
 CREATE INDEX idx_game_moves_gamer ON public.game_moves(gamer_id);
@@ -276,6 +301,7 @@ ALTER TABLE public.game_hands ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.game_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.game_moves ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.game_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.game_event_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gamer_achievements ENABLE ROW LEVEL SECURITY;
 
 -- Game sessions: Room players can view
@@ -331,6 +357,21 @@ CREATE POLICY "moves_select_room_players"
   );
 
 CREATE POLICY "moves_insert_all" ON public.game_moves FOR INSERT WITH CHECK (true);
+
+-- Game event logs: Room players can view
+CREATE POLICY "event_logs_select_room_players"
+  ON public.game_event_logs FOR SELECT
+  USING (
+    session_id IN (
+      SELECT id FROM public.game_sessions
+      WHERE room_id IN (
+        SELECT room_id FROM public.room_players
+        WHERE gamer_id IN (SELECT id FROM public.gamers WHERE profile_id = public.get_active_profile_id())
+      )
+    )
+  );
+
+CREATE POLICY "event_logs_insert_all" ON public.game_event_logs FOR INSERT WITH CHECK (true);
 
 -- Game results: Anyone can view
 CREATE POLICY "results_select_all" ON public.game_results FOR SELECT USING (true);

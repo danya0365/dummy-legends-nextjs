@@ -18,6 +18,7 @@ import { GamePlayLayoutProps } from "./types";
 import { ValidationErrorDialog } from "./ValidationErrorDialog";
 import { GameRulesPanel } from "./GameRulesPanel";
 import { GameRuleTooltip, GAME_RULE_TOOLTIPS } from "./GameRuleTooltip";
+import { GameEventTimeline } from "./GameEventTimeline";
 
 export function GamePlaySimpleView({
   currentRoom,
@@ -86,6 +87,10 @@ export function GamePlaySimpleView({
   onSortHandByRank,
   onSortHandBySuit,
   validationError,
+  gameEventLogs,
+  isLoadingEventLogs,
+  eventLogError,
+  onRefreshEventLogs,
 }: GamePlayLayoutProps) {
   void _turnActionContext;
   const [isRulesPanelOpen, setIsRulesPanelOpen] = useState(false);
@@ -130,7 +135,7 @@ export function GamePlaySimpleView({
     return otherPlayer?.displayName || "ผู้เล่น";
   };
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-100 to-blue-100 dark:from-gray-900 dark:to-gray-800 p-4">
+    <div className="min-h-screen bg-linear-to-br from-green-100 to-blue-100 dark:from-gray-900 dark:to-gray-800 p-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
@@ -150,7 +155,7 @@ export function GamePlaySimpleView({
               <Sparkles className="h-4 w-4" />
               กติกา
             </button>
-          </div>
+        </div>
 
           <div className="text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -222,7 +227,7 @@ export function GamePlaySimpleView({
         )}
 
         {/* Game Board */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
           {/* Left: Other Players */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -283,7 +288,7 @@ export function GamePlaySimpleView({
           </div>
 
           {/* Center: Deck & Discard */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 lg:col-span-2">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 text-center">
               กองไพ่
             </h3>
@@ -420,6 +425,16 @@ export function GamePlaySimpleView({
               />
               รีเฟรช
             </button>
+          </div>
+
+          {/* Event Timeline */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-0 overflow-hidden">
+            <GameEventTimeline
+              logs={gameEventLogs}
+              isLoading={isLoadingEventLogs}
+              error={eventLogError}
+              onRefresh={onRefreshEventLogs}
+            />
           </div>
         </div>
 

@@ -192,6 +192,21 @@ BEGIN
   SET status = 'playing'
   WHERE room_id = p_room_id;
   
+  PERFORM public.log_game_event(
+    v_session_id,
+    p_host_gamer_id,
+    'session_started'::public.game_event_type,
+    'เริ่มเกม',
+    jsonb_build_object(
+      'room_id', p_room_id,
+      'player_count', v_player_count,
+      'cards_per_player', v_cards_per_player,
+      'initial_discard_card_id', v_head_card
+    ),
+    NULL,
+    p_guest_identifier
+  );
+
   RETURN v_session_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -492,6 +507,19 @@ BEGIN
     )
   );
   
+  PERFORM public.log_game_event(
+    p_session_id,
+    p_gamer_id,
+    'draw_deck'::public.game_event_type,
+    'จั่วไพ่จากกองหลัก',
+    jsonb_build_object(
+      'source', 'deck',
+      'reshuffled_discard', COALESCE(v_discard_count, 0) > 0
+    ),
+    NULL,
+    p_guest_identifier
+  );
+
   RETURN v_card_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -688,6 +716,23 @@ BEGIN
     v_meld_id,
     p_meld_cards,
     jsonb_build_object('meld_type', v_meld_type::TEXT)
+  );
+
+  PERFORM public.log_game_event(
+    p_session_id,
+    p_gamer_id,
+    'create_meld'::public.game_event_type,
+    'เกิดไพ่',
+    jsonb_build_object(
+      'meld_id', v_meld_id,
+      'meld_type', v_meld_type::TEXT,
+      'card_ids', to_jsonb(p_meld_cards),
+      'includes_speto', v_includes_speto,
+      'created_from_head', v_created_from_head,
+      'score_value', v_score_value
+    ),
+    NULL,
+    p_guest_identifier
   );
 
   IF v_created_from_head THEN
@@ -1060,6 +1105,21 @@ BEGIN
       )
     );
   END IF;
+
+  PERFORM public.log_game_event(
+    p_session_id,
+    p_gamer_id,
+    'layoff'::public.game_event_type,
+    'ฝากไพ่',
+    jsonb_build_object(
+      'target_meld_id', p_target_meld_id,
+      'card_ids', to_jsonb(p_layoff_card_ids),
+      'target_owner', v_target_owner,
+      'speto_count', array_length(v_speto_card_ids, 1)
+    ),
+    v_target_owner,
+    p_guest_identifier
+  );
 
   IF array_length(v_speto_card_ids, 1) > 0 THEN
     INSERT INTO public.game_score_events (
@@ -1589,6 +1649,21 @@ BEGIN
     jsonb_build_object('meld_type', v_meld_type::TEXT)
   );
 
+  PERFORM public.log_game_event(
+    p_session_id,
+    p_gamer_id,
+    'draw_discard'::public.game_event_type,
+    'จั่วจากกองทิ้งและเกิดไพ่',
+    jsonb_build_object(
+      'selected_discard_card_id', v_selected_discard_card_id,
+      'cards_collected', to_jsonb(v_cards_to_collect),
+      'meld_id', v_meld_id,
+      'meld_type', v_meld_type::TEXT
+    ),
+    NULL,
+    p_guest_identifier
+  );
+
   IF v_created_from_head THEN
     INSERT INTO public.game_score_events (
       session_id,
@@ -1764,6 +1839,19 @@ BEGIN
     jsonb_build_object('card_id', p_card_id)
   );
   
+  PERFORM public.log_game_event(
+    p_session_id,
+    p_gamer_id,
+    'discard'::public.game_event_type,
+    'ทิ้งไพ่',
+    jsonb_build_object(
+      'card_id', p_card_id,
+      'next_player_id', v_next_player
+    ),
+    v_next_player,
+    p_guest_identifier
+  );
+
   -- Get next player
   SELECT gamer_id INTO v_next_player
   FROM public.room_players

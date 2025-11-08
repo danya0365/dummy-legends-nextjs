@@ -498,6 +498,160 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =====================================================
+-- GAME EVENT LOGGING RPCs
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.log_game_event(
+  p_session_id UUID,
+  p_actor_gamer_id UUID,
+  p_event_type public.game_event_type,
+  p_description TEXT DEFAULT NULL,
+  p_detail JSONB DEFAULT NULL,
+  p_target_gamer_id UUID DEFAULT NULL,
+  p_guest_identifier TEXT DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+  v_can_access BOOLEAN;
+  v_session public.game_sessions%ROWTYPE;
+  v_event_order BIGINT;
+  v_detail JSONB := COALESCE(p_detail, '{}'::jsonb);
+  v_event_id UUID;
+BEGIN
+  IF p_actor_gamer_id IS NOT NULL THEN
+    v_can_access := public.can_access_gamer(p_actor_gamer_id, p_guest_identifier);
+    IF NOT v_can_access THEN
+      RAISE EXCEPTION 'Not authorized to log event';
+    END IF;
+  END IF;
+
+  SELECT *
+  INTO v_session
+  FROM public.game_sessions
+  WHERE id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Game session not found';
+  END IF;
+
+  IF p_actor_gamer_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.room_players rp
+      WHERE rp.room_id = v_session.room_id
+        AND rp.gamer_id = p_actor_gamer_id
+    ) THEN
+      RAISE EXCEPTION 'Actor is not part of this room';
+    END IF;
+  END IF;
+
+  IF jsonb_typeof(v_detail) IS DISTINCT FROM 'object' THEN
+    v_detail := '{}'::jsonb;
+  END IF;
+
+  IF p_actor_gamer_id IS NOT NULL THEN
+    v_detail := jsonb_build_object('actor_gamer_id', p_actor_gamer_id) || v_detail;
+  END IF;
+
+  SELECT event_order
+  INTO v_event_order
+  FROM public.game_event_logs
+  WHERE session_id = p_session_id
+  ORDER BY event_order DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  v_event_order := COALESCE(v_event_order, 0) + 1;
+
+  INSERT INTO public.game_event_logs (
+    session_id,
+    room_id,
+    gamer_id,
+    event_type,
+    event_order,
+    description,
+    detail
+  ) VALUES (
+    p_session_id,
+    v_session.room_id,
+    COALESCE(p_target_gamer_id, p_actor_gamer_id),
+    p_event_type,
+    v_event_order,
+    p_description,
+    v_detail
+  ) RETURNING id INTO v_event_id;
+
+  RETURN v_event_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.get_game_event_logs(
+  p_session_id UUID,
+  p_gamer_id UUID,
+  p_guest_identifier TEXT DEFAULT NULL,
+  p_limit INTEGER DEFAULT 100,
+  p_offset BIGINT DEFAULT 0
+)
+RETURNS TABLE (
+  id UUID,
+  session_id UUID,
+  room_id UUID,
+  gamer_id UUID,
+  event_type public.game_event_type,
+  event_order BIGINT,
+  description TEXT,
+  detail JSONB,
+  created_at TIMESTAMP WITH TIME ZONE
+) AS $$
+DECLARE
+  v_can_access BOOLEAN;
+  v_room_id UUID;
+  v_limit INTEGER := LEAST(GREATEST(COALESCE(p_limit, 100), 1), 500);
+  v_offset BIGINT := GREATEST(COALESCE(p_offset, 0), 0);
+BEGIN
+  v_can_access := public.can_access_gamer(p_gamer_id, p_guest_identifier);
+  IF NOT v_can_access THEN
+    RAISE EXCEPTION 'Not authorized to view event logs';
+  END IF;
+
+  SELECT room_id
+  INTO v_room_id
+  FROM public.game_sessions
+  WHERE id = p_session_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Game session not found';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.room_players rp
+    WHERE rp.room_id = v_room_id
+      AND rp.gamer_id = p_gamer_id
+  ) THEN
+    RAISE EXCEPTION 'Player is not part of this room';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    gel.id,
+    gel.session_id,
+    gel.room_id,
+    gel.gamer_id,
+    gel.event_type,
+    gel.event_order,
+    gel.description,
+    gel.detail,
+    gel.created_at
+  FROM public.game_event_logs gel
+  WHERE gel.session_id = p_session_id
+  ORDER BY gel.event_order
+  LIMIT v_limit OFFSET v_offset;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =====================================================
 -- REALTIME PUBLICATION
 -- =====================================================
 
@@ -508,3 +662,4 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.game_sessions;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.game_hands;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.game_cards;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.game_moves;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.game_event_logs;

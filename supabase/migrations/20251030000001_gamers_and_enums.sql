@@ -17,6 +17,24 @@ CREATE TYPE public.card_suit AS ENUM ('hearts', 'diamonds', 'clubs', 'spades');
 CREATE TYPE public.card_rank AS ENUM ('A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K');
 CREATE TYPE public.game_move_type AS ENUM ('draw_deck', 'draw_discard', 'discard', 'meld', 'lay_off', 'knock', 'gin', 'dummy_finish');
 CREATE TYPE public.meld_type AS ENUM ('set', 'run');
+CREATE TYPE public.game_event_type AS ENUM (
+  'session_started',
+  'turn_started',
+  'draw_deck',
+  'draw_discard',
+  'discard',
+  'create_meld',
+  'layoff',
+  'knock',
+  'gin',
+  'dummy_finish',
+  'penalty_dummy',
+  'penalty_head',
+  'penalty_full',
+  'penalty_spe_to',
+  'penalty_foolish',
+  'system_notification'
+);
 CREATE TYPE public.score_event_type AS ENUM (
   'meld_points',
   'hand_penalty',
