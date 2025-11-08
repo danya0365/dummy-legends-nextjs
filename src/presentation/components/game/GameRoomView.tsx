@@ -15,9 +15,10 @@ import {
   Trophy,
   Users,
 } from "lucide-react";
+import type { GameResultPlayerSummary } from "@/src/domain/types/gameplay.types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface GameRoomViewProps {
   roomId: string;
@@ -33,6 +34,9 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
     joinRoom,
     leaveRoom,
     gameResultSummary,
+    gameResultPlayers,
+    isLoadingResultSummary,
+    resultSummaryError,
     loadGameResultSummaryForRoom,
     toggleReady,
     startGame,
@@ -47,13 +51,12 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
   const [copied, setCopied] = useState(false);
   const [resumeLoading, setResumeLoading] = useState(false);
   const hasAutoNavigatedRef = useRef(false);
+  const hasLoadedResultRef = useRef(false);
 
   useEffect(() => {
     const initialize = async () => {
-      // Initialize gamer first
       await initializeGamer();
 
-      // If not in room, join by roomId
       if (!currentRoom) {
         try {
           await joinRoom({ roomId: _roomId });
@@ -66,6 +69,33 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
 
     initialize();
   }, [_roomId, currentRoom, initializeGamer, joinRoom, router]);
+
+  useEffect(() => {
+    if (!currentRoom) {
+      hasLoadedResultRef.current = false;
+      return;
+    }
+
+    if (currentRoom.status === "finished") {
+      const shouldRetry =
+        !gameResultSummary &&
+        !isLoadingResultSummary &&
+        !resultSummaryError;
+
+      if (!hasLoadedResultRef.current || shouldRetry) {
+        hasLoadedResultRef.current = true;
+        void loadGameResultSummaryForRoom(currentRoom.id);
+      }
+    } else {
+      hasLoadedResultRef.current = false;
+    }
+  }, [
+    currentRoom,
+    gameResultSummary,
+    isLoadingResultSummary,
+    resultSummaryError,
+    loadGameResultSummaryForRoom,
+  ]);
 
   const handleCopyCode = () => {
     if (currentRoom) {
@@ -109,6 +139,51 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
   const isGamePlaying = currentRoom?.status === "playing";
   const isGameFinished = currentRoom?.status === "finished";
   const resultSessionId = gameResultSummary?.sessionId;
+
+  const playerResultMap = useMemo(() => {
+    if (!isGameFinished || !gameResultPlayers || gameResultPlayers.length === 0) {
+      return null;
+    }
+
+    return new Map<string, GameResultPlayerSummary>(
+      gameResultPlayers.map((player) => [player.gamerId, player])
+    );
+  }, [gameResultPlayers, isGameFinished]);
+
+  const statusDisplay = useMemo(() => {
+    switch (currentRoom?.status) {
+      case "waiting":
+        return {
+          label: "รอผู้เล่น",
+          className: "text-yellow-600 dark:text-yellow-400",
+        } as const;
+      case "ready":
+        return {
+          label: "พร้อมเริ่ม",
+          className: "text-green-600 dark:text-green-400",
+        } as const;
+      case "playing":
+        return {
+          label: "เกมกำลังดำเนินอยู่",
+          className: "text-green-600 dark:text-green-400",
+        } as const;
+      case "finished":
+        return {
+          label: "เกมจบแล้ว",
+          className: "text-purple-600 dark:text-purple-400",
+        } as const;
+      case "cancelled":
+        return {
+          label: "ห้องถูกยกเลิก",
+          className: "text-red-500 dark:text-red-400",
+        } as const;
+      default:
+        return {
+          label: "สถานะไม่ทราบ",
+          className: "text-gray-500 dark:text-gray-400",
+        } as const;
+    }
+  }, [currentRoom?.status]);
 
   const handleResumeGame = useCallback(async (): Promise<boolean> => {
     if (!currentRoom) return false;
@@ -213,6 +288,12 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                     เกมกำลังดำเนินอยู่
                   </span>
                 )}
+                {isGameFinished && (
+                  <span className="flex items-center gap-1 text-sm text-purple-600 dark:text-purple-400">
+                    <Trophy className="h-4 w-4" />
+                    เกมจบแล้ว
+                  </span>
+                )}
               </div>
             </div>
             <button
@@ -293,86 +374,131 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
             {/* Players List */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                ผู้เล่นในห้อง
+                {isGameFinished ? "ผลผู้เล่นในรอบล่าสุด" : "ผู้เล่นในห้อง"}
               </h2>
               <div className="space-y-3">
-                {currentRoom.players.map((player) => (
-                  <div
-                    key={player.id}
-                    className={`flex items-center justify-between p-4 rounded-lg border-2 ${
-                      player.userId === gamerId
-                        ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                        : "border-gray-200 dark:border-gray-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
-                          {player.displayName.charAt(0)}
-                        </div>
-                        {player.isHost && (
-                          <div className="absolute -top-1 -right-1 h-5 w-5 bg-yellow-400 rounded-full flex items-center justify-center">
-                            <span className="text-xs">👑</span>
+                {currentRoom.players.map((player) => {
+                  const result = player.userId
+                    ? playerResultMap?.get(player.userId)
+                    : undefined;
+                  const isCurrentUser = player.userId === gamerId;
+                  const badge = isGameFinished
+                    ? result?.position
+                    : player.isHost
+                    ? "host"
+                    : player.isReady
+                    ? "ready"
+                    : null;
+
+                  return (
+                    <div
+                      key={player.id}
+                      className={`flex items-center justify-between p-4 rounded-lg border-2 ${
+                        isCurrentUser
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                          : "border-gray-200 dark:border-gray-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                            {player.displayName.charAt(0)}
                           </div>
-                        )}
+                          {player.isHost && !isGameFinished && (
+                            <div className="absolute -top-1 -right-1 h-5 w-5 bg-yellow-400 rounded-full flex items-center justify-center">
+                              <span className="text-xs">👑</span>
+                            </div>
+                          )}
+                          {isGameFinished && result?.isWinner && (
+                            <div className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-yellow-400 flex items-center justify-center text-[13px] font-semibold">
+                              🏆
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                              {player.displayName}
+                            </span>
+                            {isCurrentUser && (
+                              <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-0.5 rounded">
+                                คุณ
+                              </span>
+                            )}
+                            {player.isHost && !isGameFinished && (
+                              <span className="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 px-2 py-0.5 rounded">
+                                เจ้าของห้อง
+                              </span>
+                            )}
+                            {isGameFinished && result && (
+                              <span className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 px-2 py-0.5 rounded">
+                                {result.isWinner ? "ผู้ชนะ" : `อันดับ ${result.position}`}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            <Trophy className="h-3 w-3" />
+                            {isGameFinished && result ? (
+                              <span>คะแนน {result.totalPoints >= 0 ? `+${result.totalPoints}` : result.totalPoints}P</span>
+                            ) : (
+                              <>
+                                <span>Lv.{player.level}</span>
+                                <span>•</span>
+                                <span>ELO {player.elo}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-gray-900 dark:text-gray-100">
-                            {player.displayName}
+                        {isGameFinished ? (
+                          result ? (
+                            <div className="text-right">
+                              <div className="text-sm font-semibold text-purple-600 dark:text-purple-300">
+                                รวม {result.totalPoints >= 0 ? `+${result.totalPoints}` : result.totalPoints}P
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                แต้มติดมือ {result.handPoints}P
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-400 dark:text-gray-500">
+                              {resultSummaryError ?? "รอผลสรุป..."}
+                            </span>
+                          )
+                        ) : badge === "ready" ? (
+                          <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-medium text-sm">
+                            <Check className="h-4 w-4" />
+                            พร้อม
                           </span>
-                          {player.userId === gamerId && (
-                            <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-0.5 rounded">
-                              คุณ
-                            </span>
-                          )}
-                          {player.isHost && (
-                            <span className="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 px-2 py-0.5 rounded">
-                              เจ้าของห้อง
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          <Trophy className="h-3 w-3" />
-                          <span>Lv.{player.level}</span>
-                          <span>•</span>
-                          <span>ELO {player.elo}</span>
-                        </div>
+                        ) : badge === "host" ? (
+                          <span className="text-gray-400 dark:text-gray-500 text-sm">
+                            รอผู้เล่น
+                          </span>
+                        ) : (
+                          <span className="text-yellow-600 dark:text-yellow-400 text-sm">
+                            กำลังเตรียมตัว...
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div>
-                      {player.isReady ? (
-                        <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-medium text-sm">
-                          <Check className="h-4 w-4" />
-                          พร้อม
-                        </span>
-                      ) : player.isHost ? (
-                        <span className="text-gray-400 dark:text-gray-500 text-sm">
-                          รอผู้เล่น
-                        </span>
-                      ) : (
-                        <span className="text-yellow-600 dark:text-yellow-400 text-sm">
-                          กำลังเตรียมตัว...
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
-                {/* Empty Slots */}
-                {Array.from({
-                  length:
-                    currentRoom.maxPlayerCount - currentRoom.currentPlayerCount,
-                }).map((_, idx) => (
-                  <div
-                    key={`empty-${idx}`}
-                    className="flex items-center justify-center p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600"
-                  >
-                    <span className="text-gray-400 dark:text-gray-500 text-sm">
-                      รอผู้เล่น...
-                    </span>
-                  </div>
-                ))}
+                {!isGameFinished &&
+                  Array.from({
+                    length:
+                      currentRoom.maxPlayerCount - currentRoom.currentPlayerCount,
+                  }).map((_, idx) => (
+                    <div
+                      key={`empty-${idx}`}
+                      className="flex items-center justify-center p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600"
+                    >
+                      <span className="text-gray-400 dark:text-gray-500 text-sm">
+                        รอผู้เล่น...
+                      </span>
+                    </div>
+                  ))}
               </div>
             </div>
           </div>
@@ -380,7 +506,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
           {/* Right Column - Actions */}
           <div className="space-y-6">
             {/* Ready Button */}
-            {!isHost && !isGamePlaying && (
+            {!isHost && !isGamePlaying && !isGameFinished && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
                   สถานะของคุณ
@@ -400,7 +526,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
             )}
 
             {/* Start Game Button (Host Only) */}
-            {isHost && !isGamePlaying && (
+            {isHost && !isGamePlaying && !isGameFinished && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
                   การควบคุมเกม
@@ -425,7 +551,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                 )}
               </div>
             )}
-            {isHost && isGamePlaying && (
+            {isHost && isGamePlaying && !isGameFinished && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
                   เกมกำลังดำเนินอยู่
@@ -443,7 +569,7 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                 </p>
               </div>
             )}
-            {!isHost && isGamePlaying && (
+            {!isHost && isGamePlaying && !isGameFinished && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
                   เกมกำลังดำเนินอยู่
@@ -511,8 +637,10 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
                   <span className="text-gray-600 dark:text-gray-400">
                     สถานะ
                   </span>
-                  <span className="font-medium text-yellow-600 dark:text-yellow-400">
-                    รอผู้เล่น
+                  <span
+                    className={`font-medium ${statusDisplay.className}`}
+                  >
+                    {statusDisplay.label}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -527,29 +655,31 @@ export function GameRoomView({ roomId: _roomId }: GameRoomViewProps) {
             </div>
 
             {/* Share Room */}
-            <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-2xl shadow-md p-6 border border-blue-200 dark:border-blue-800">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                เชิญเพื่อน
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                แชร์รหัสห้องนี้กับเพื่อนของคุณ
-              </p>
-              <div className="flex items-center gap-2 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <code className="flex-1 font-mono text-xl font-bold text-center text-blue-600 dark:text-blue-400">
-                  {currentRoom.code}
-                </code>
-                <button
-                  onClick={handleCopyCode}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-                >
-                  {copied ? (
-                    <Check className="h-5 w-5 text-green-500" />
-                  ) : (
-                    <Copy className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                  )}
-                </button>
+            {!isGameFinished && (
+              <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-2xl shadow-md p-6 border border-blue-200 dark:border-blue-800">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  เชิญเพื่อน
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  แชร์รหัสห้องนี้กับเพื่อนของคุณ
+                </p>
+                <div className="flex items-center gap-2 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <code className="flex-1 font-mono text-xl font-bold text-center text-blue-600 dark:text-blue-400">
+                    {currentRoom.code}
+                  </code>
+                  <button
+                    onClick={handleCopyCode}
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                  >
+                    {copied ? (
+                      <Check className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <Copy className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

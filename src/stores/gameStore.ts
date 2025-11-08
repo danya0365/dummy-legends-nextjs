@@ -1432,16 +1432,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const { currentRoom, gamerId, guestId } = get();
       if (!currentRoom || !gamerId) return;
 
-      const { error } = await supabase.rpc("leave_game_room", {
-        p_gamer_id: gamerId,
-        p_room_id: currentRoom.id,
-        p_guest_identifier: guestId || undefined,
-      });
+      if (currentRoom.status !== "finished") {
+        const { error } = await supabase.rpc("leave_game_room", {
+          p_gamer_id: gamerId,
+          p_room_id: currentRoom.id,
+          p_guest_identifier: guestId || undefined,
+        });
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       // Unsubscribe from realtime
-      get().unsubscribeFromRoom();
+      void get().unsubscribeFromRoom();
 
       set({
         currentRoom: null,
