@@ -1478,6 +1478,8 @@ DECLARE
   v_speto_card_ids UUID[] := '{}';
   v_cards_to_collect UUID[] := '{}';
   v_cards_collected_count INTEGER := 0;
+  v_selected_position INTEGER;
+  v_highest_discard_position INTEGER;
   v_target_position INTEGER;
   v_card_to_collect UUID;
   rec_discard_card RECORD;
@@ -1540,24 +1542,6 @@ BEGIN
     RAISE EXCEPTION 'Discard pile is empty';
   END IF;
 
-  -- ยืนยันว่าไพ่ทั้งหมดสร้าง meld ได้จริง (ไพ่กองทิ้งต้องเป็นใบที่เลือกและไพ่ที่เหลือต้องอยู่ในมือผู้เล่น)
-  IF EXISTS (
-    SELECT 1
-    FROM unnest(p_meld_cards) AS meld_card
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM public.game_cards
-      WHERE id = meld_card
-        AND session_id = p_session_id
-        AND (
-          (id = v_selected_discard_card_id AND location = 'discard')
-          OR (id <> v_selected_discard_card_id AND location = 'hand' AND owner_gamer_id = p_gamer_id)
-        )
-    )
-  ) THEN
-    RAISE EXCEPTION 'Meld contains cards not accessible to player';
-  END IF;
-
   -- ป้องกันการเลือกไพ่กองทิ้งที่ไม่ได้รวมอยู่ใน meld
   IF NOT (v_selected_discard_card_id = ANY(p_meld_cards)) THEN
     RAISE EXCEPTION 'Selected discard card must be included in meld';
@@ -1565,15 +1549,44 @@ BEGIN
 
   -- หาตำแหน่งไพ่ในกองทิ้งและรวบรวมไพ่ทั้งหมดตั้งแต่ใบที่เลือกขึ้นไปด้านบน
   SELECT position_in_location
-  INTO v_target_position
+  INTO v_selected_position
   FROM public.game_cards
   WHERE id = v_selected_discard_card_id
     AND session_id = p_session_id
     AND location = 'discard'
   FOR UPDATE;
 
-  IF v_target_position IS NULL THEN
+  IF v_selected_position IS NULL THEN
     RAISE EXCEPTION 'Selected discard card is no longer available';
+  END IF;
+
+  SELECT MAX(position_in_location)
+  INTO v_highest_discard_position
+  FROM public.game_cards
+  WHERE session_id = p_session_id
+    AND id = ANY(p_meld_cards)
+    AND location = 'discard';
+
+  IF v_highest_discard_position IS NOT NULL THEN
+    v_target_position := GREATEST(v_selected_position, v_highest_discard_position);
+  ELSE
+    v_target_position := v_selected_position;
+  END IF;
+
+  -- ยืนยันว่าไพ่ทั้งหมดสร้าง meld ได้จริง (ไพ่กองทิ้งต้องอยู่ในช่วงที่เก็บได้ และไพ่ที่เหลือต้องอยู่ในมือผู้เล่น)
+  IF EXISTS (
+    SELECT 1
+    FROM unnest(p_meld_cards) AS meld_card
+    LEFT JOIN public.game_cards gc
+      ON gc.id = meld_card
+      AND gc.session_id = p_session_id
+    WHERE gc.id IS NULL
+      OR NOT (
+        (gc.location = 'hand' AND gc.owner_gamer_id = p_gamer_id)
+        OR (gc.location = 'discard' AND gc.position_in_location <= v_target_position)
+      )
+  ) THEN
+    RAISE EXCEPTION 'Meld contains cards not accessible to player';
   END IF;
 
   v_cards_to_collect := ARRAY[]::UUID[];

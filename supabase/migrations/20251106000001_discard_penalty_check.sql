@@ -12,9 +12,12 @@ DECLARE
   v_can_meld BOOLEAN := false;
   v_discarded_rank public.card_rank;
   v_discarded_suit public.card_suit;
-  v_hand_cards RECORD;
+  v_discarded_order INTEGER;
   v_same_rank_count INTEGER;
-  v_same_suit_sequential INTEGER;
+  v_has_lower1 BOOLEAN := false;
+  v_has_lower2 BOOLEAN := false;
+  v_has_upper1 BOOLEAN := false;
+  v_has_upper2 BOOLEAN := false;
 BEGIN
   -- ดึงข้อมูลไพ่ที่ทิ้ง
   SELECT rank, suit
@@ -38,50 +41,37 @@ BEGIN
     AND rank = v_discarded_rank;
 
   IF v_same_rank_count >= 2 THEN
-    v_can_meld := true;
-    RETURN v_can_meld;
+    RETURN true;
   END IF;
 
-  -- กรณี 2: เรียง (run) - ต้องมีไพ่ suit เดียวกันที่ต่อกันได้อย่างน้อย 2 ใบ
-  -- ตรวจว่ามีไพ่ที่สามารถต่อเป็นเรียงกับไพ่ที่ทิ้งได้หรือไม่
-  WITH hand_same_suit AS (
-    SELECT 
-      gc.rank,
-      public.get_card_rank_order(gc.rank) AS rank_order
+  v_discarded_order := public.get_card_rank_order(v_discarded_rank);
+
+  SELECT
+    COALESCE(bool_or(rank_order = v_discarded_order - 1), false) AS has_lower1,
+    COALESCE(bool_or(rank_order = v_discarded_order - 2), false) AS has_lower2,
+    COALESCE(bool_or(rank_order = v_discarded_order + 1), false) AS has_upper1,
+    COALESCE(bool_or(rank_order = v_discarded_order + 2), false) AS has_upper2
+  INTO
+    v_has_lower1,
+    v_has_lower2,
+    v_has_upper1,
+    v_has_upper2
+  FROM (
+    SELECT public.get_card_rank_order(gc.rank) AS rank_order
     FROM public.game_cards gc
     WHERE gc.session_id = p_session_id
       AND gc.owner_gamer_id = p_next_gamer_id
       AND gc.location = 'hand'
       AND gc.suit = v_discarded_suit
-  ),
-  discarded_order AS (
-    SELECT public.get_card_rank_order(v_discarded_rank) AS rank_order
-  ),
-  combined AS (
-    SELECT rank_order FROM hand_same_suit
-    UNION ALL
-    SELECT rank_order FROM discarded_order
-  ),
-  ordered AS (
-    SELECT rank_order
-    FROM combined
-    ORDER BY rank_order
-  ),
-  sequential_check AS (
-    SELECT 
-      rank_order,
-      rank_order - LAG(rank_order, 1, rank_order - 1) OVER (ORDER BY rank_order) AS diff,
-      rank_order - LAG(rank_order, 2, rank_order - 2) OVER (ORDER BY rank_order) AS diff2
-    FROM ordered
-  )
-  SELECT EXISTS (
-    SELECT 1
-    FROM sequential_check
-    WHERE diff = 1 AND diff2 = 2
-  )
-  INTO v_can_meld;
+  ) hand_orders;
 
-  RETURN v_can_meld;
+  IF (v_has_lower1 AND v_has_lower2)
+    OR (v_has_lower1 AND v_has_upper1)
+    OR (v_has_upper1 AND v_has_upper2) THEN
+    RETURN true;
+  END IF;
+
+  RETURN false;
 END;
 $$ LANGUAGE plpgsql STABLE;
 
