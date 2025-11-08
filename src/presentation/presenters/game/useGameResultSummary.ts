@@ -28,27 +28,23 @@ export function useGameResultSummary(
   sessionId?: string,
   roomId?: string
 ): [GameResultPresenterState, GameResultPresenterActions] {
-  const {
-    gameResultSummary,
-    gameResultPlayers,
-    gameResultMelds,
-    gameScoreEvents,
-    isLoadingResultSummary,
-    resultSummaryError,
-    loadGameResultSummary,
-    loadGameResultSummaryForRoom,
-    resetGameResultSummary,
-  } = useGameStore((state) => ({
-    gameResultSummary: state.gameResultSummary,
-    gameResultPlayers: state.gameResultPlayers,
-    gameResultMelds: state.gameResultMelds,
-    gameScoreEvents: state.gameScoreEvents,
-    isLoadingResultSummary: state.isLoadingResultSummary,
-    resultSummaryError: state.resultSummaryError,
-    loadGameResultSummary: state.loadGameResultSummary,
-    loadGameResultSummaryForRoom: state.loadGameResultSummaryForRoom,
-    resetGameResultSummary: state.resetGameResultSummary,
-  }));
+  const gameResultSummary = useGameStore((state) => state.gameResultSummary);
+  const gameResultPlayers = useGameStore((state) => state.gameResultPlayers);
+  const gameResultMelds = useGameStore((state) => state.gameResultMelds);
+  const gameScoreEvents = useGameStore((state) => state.gameScoreEvents);
+  const isLoadingResultSummary = useGameStore(
+    (state) => state.isLoadingResultSummary
+  );
+  const resultSummaryError = useGameStore((state) => state.resultSummaryError);
+  const loadGameResultSummary = useGameStore(
+    (state) => state.loadGameResultSummary
+  );
+  const loadGameResultSummaryForRoom = useGameStore(
+    (state) => state.loadGameResultSummaryForRoom
+  );
+  const resetGameResultSummary = useGameStore(
+    (state) => state.resetGameResultSummary
+  );
 
   const loadSummary = useCallback(
     async (id: string) => {
