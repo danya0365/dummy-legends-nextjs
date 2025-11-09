@@ -19,7 +19,6 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { GamerProfileModal } from "./GamerProfileModal";
@@ -61,6 +60,7 @@ export function GameLobbyView() {
   const [inviteCode, setInviteCode] = useState("");
   const [invitePassword, setInvitePassword] = useState("");
   const [joinByCodeError, setJoinByCodeError] = useState<string | null>(null);
+  const [showJoinByCodeModal, setShowJoinByCodeModal] = useState(false);
   const [isResumingRoom, setIsResumingRoom] = useState(false);
   const [resumeError, setResumeError] = useState<string | null>(null);
 
@@ -232,6 +232,7 @@ export function GameLobbyView() {
 
       setInviteCode("");
       setInvitePassword("");
+      setShowJoinByCodeModal(false);
       router.push(`/game/room/${joinedRoomId}`);
     } catch (error) {
       if (error instanceof Error) {
@@ -328,6 +329,18 @@ export function GameLobbyView() {
                 รีเฟรช
               </button>
               <button
+                onClick={() => {
+                  setInviteCode("");
+                  setInvitePassword("");
+                  setJoinByCodeError(null);
+                  setShowJoinByCodeModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 border border-purple-300 bg-white text-purple-700 rounded-lg transition hover:bg-purple-50 dark:border-purple-700 dark:bg-purple-900/30 dark:text-purple-200 dark:hover:bg-purple-800/40"
+              >
+                <UserPlus className="h-5 w-5" />
+                เข้าห้องด้วยรหัส
+              </button>
+              <button
                 onClick={handleCreateRoom}
                 className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
@@ -391,76 +404,6 @@ export function GameLobbyView() {
             </div>
           </div>
         </div>
-
-        {/* Join by Invite Code */}
-        <div className="mb-8">
-          <div className="rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 via-blue-50 to-white p-5 shadow-sm dark:border-purple-800 dark:from-purple-950/40 dark:via-blue-900/20 dark:to-gray-900">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  เข้าร่วมห้องจากรหัสเชิญ
-                </h2>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  วางรหัส 6 หลักที่เพื่อนส่งมาให้ แล้วกดเข้าร่วมได้ทันที
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-[2fr,1fr]">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  รหัสห้อง
-                </label>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={(event) => {
-                    const value = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-                    setInviteCode(value.slice(0, 6));
-                    if (joinByCodeError) setJoinByCodeError(null);
-                  }}
-                  placeholder="เช่น ABC123"
-                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 transition focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  รหัสผ่าน (ถ้ามี)
-                </label>
-                <input
-                  type="password"
-                  value={invitePassword}
-                  onChange={(event) => {
-                    setInvitePassword(event.target.value);
-                    if (joinByCodeError) setJoinByCodeError(null);
-                  }}
-                  placeholder="สำหรับห้องส่วนตัว"
-                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 transition focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-                />
-              </div>
-            </div>
-
-            {joinByCodeError && (
-              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
-                {joinByCodeError}
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                เคล็ดลับ: คุณสามารถป้อนรหัสได้โดยไม่ต้องออกจากหน้าล็อบบี้
-              </p>
-              <button
-                onClick={handleJoinByInviteCode}
-                disabled={!inviteCode || inviteCode.length < 4 || isLoading}
-                className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isLoading ? "กำลังเข้าร่วม..." : "เข้าร่วมด้วยรหัส"}
-              </button>
-            </div>
-          </div>
-        </div>
-
         {currentRoom && (
           <div className="mb-8">
             <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 shadow-sm dark:border-blue-900 dark:bg-blue-900/20">
@@ -746,28 +689,127 @@ export function GameLobbyView() {
           </div>
         )}
 
-        {/* Quick Info */}
-        <div className="mt-8 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            💡 เคล็ดลับ: คุณสามารถเข้าร่วมห้องด้วยรหัส 6 หลักได้โดยตรง
-          </p>
-          <Link
-            href="/"
-            className="inline-block mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
-          >
-            ← กลับหน้าแรก
-          </Link>
-        </div>
-      </div>
+        {/* Join By Code Modal */}
+        {showJoinByCodeModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    เข้าร่วมห้องด้วยรหัสเชิญ
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    กรอกรหัส 6 หลัก และรหัสผ่านหากเป็นห้องส่วนตัว
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowJoinByCodeModal(false);
+                    setInviteCode("");
+                    setInvitePassword("");
+                    setJoinByCodeError(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  aria-label="Close join-by-code modal"
+                >
+                  ✕
+                </button>
+              </div>
 
-      <GamerProfileModal
-        isOpen={isGamerProfileModalOpen}
-        formState={gamerProfileForm}
-        isSaving={isSavingGamerProfile}
-        onChange={updateGamerProfileForm}
-        onClose={closeGamerProfileModal}
-        onConfirm={saveGamerProfile}
-      />
+              <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    รหัสห้อง
+                  </label>
+                  <input
+                    type="text"
+                    value={inviteCode}
+                    onChange={(event) => {
+                      const value = event.target.value
+                        .toUpperCase()
+                        .replace(/[^A-Z0-9]/g, "");
+                      setInviteCode(value.slice(0, 6));
+                      if (joinByCodeError) setJoinByCodeError(null);
+                    }}
+                    placeholder="เช่น ABC123"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 transition focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    autoFocus
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void handleJoinByInviteCode();
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    รหัสผ่าน (ถ้ามี)
+                  </label>
+                  <input
+                    type="password"
+                    value={invitePassword}
+                    onChange={(event) => {
+                      setInvitePassword(event.target.value);
+                      if (joinByCodeError) setJoinByCodeError(null);
+                    }}
+                    placeholder="สำหรับห้องส่วนตัว"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 transition focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void handleJoinByInviteCode();
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              {joinByCodeError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+                  {joinByCodeError}
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  เคล็ดลับ: คุณสามารถเข้าร่วมได้ทันทีโดยไม่ต้องออกจากหน้าล็อบบี้
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowJoinByCodeModal(false);
+                      setInviteCode("");
+                      setInvitePassword("");
+                      setJoinByCodeError(null);
+                    }}
+                    className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    onClick={handleJoinByInviteCode}
+                    disabled={!inviteCode || inviteCode.length < 4 || isLoading}
+                    className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isLoading ? "กำลังเข้าร่วม..." : "เข้าร่วมด้วยรหัส"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <GamerProfileModal
+          isOpen={isGamerProfileModalOpen}
+          formState={gamerProfileForm}
+          isSaving={isSavingGamerProfile}
+          onChange={updateGamerProfileForm}
+          onClose={closeGamerProfileModal}
+          onConfirm={saveGamerProfile}
+        />
+      </div>
     </div>
   );
 }
+
