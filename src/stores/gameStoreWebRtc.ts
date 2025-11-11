@@ -210,7 +210,7 @@ export interface WebRtcGameMessage<T = unknown> {
   timestamp: number;
 }
 
-interface ParticipantSummary {
+export interface ParticipantSummary {
   peerId: string;
   displayName: string;
   connected: boolean;

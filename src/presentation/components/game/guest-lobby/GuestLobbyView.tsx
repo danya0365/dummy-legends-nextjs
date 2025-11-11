@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/src/utils/cn";
+import Link from "next/link";
 import { useGameStoreWebRtc } from "@/src/stores/gameStoreWebRtc";
 
 const CONNECTION_LABELS: Record<string, string> = {
@@ -53,6 +54,7 @@ export function GuestLobbyView() {
     connectionState,
     participants,
     messages,
+    gameStateSnapshot,
     error,
     createRoom,
     joinRoom,
@@ -206,6 +208,22 @@ export function GuestLobbyView() {
   }, [messages]);
 
   const hasActiveRoom = Boolean(roomId);
+
+  const canEnterGameplay = useMemo(() => {
+    if (!hasActiveRoom) {
+      return false;
+    }
+    if (isHost) {
+      return true;
+    }
+
+    const me = participants.find((participant) => participant.peerId === localPeerId);
+    if (me?.connected) {
+      return true;
+    }
+
+    return Boolean(gameStateSnapshot);
+  }, [gameStateSnapshot, hasActiveRoom, isHost, localPeerId, participants]);
 
   const shouldShowSignalingOverlay =
     !signalingReady &&
@@ -417,19 +435,29 @@ export function GuestLobbyView() {
               </div>
 
               {hasActiveRoom ? (
-                <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
                   <div className="flex flex-col text-sm text-gray-300">
                     <span className="text-white font-medium">อยู่ในห้องแล้ว</span>
                     <span>
                       แชร์รหัสให้เพื่อนหรือรอให้เพื่อนเข้าร่วม จากนั้นเริ่มสนทนาได้ทันที
                     </span>
                   </div>
-                  <button
-                    onClick={handleLeaveRoom}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-rose-500 hover:bg-rose-400 px-4 py-2 text-sm text-white"
-                  >
-                    <LogOut className="h-4 w-4" /> ออกจากห้อง
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {canEnterGameplay && (
+                      <Link
+                        href="/game/guest-play"
+                        className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 px-4 py-2 text-sm text-white"
+                      >
+                        <PlugZap className="h-4 w-4" /> เข้าเกม WebRTC
+                      </Link>
+                    )}
+                    <button
+                      onClick={handleLeaveRoom}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-rose-500 hover:bg-rose-400 px-4 py-2 text-sm text-white"
+                    >
+                      <LogOut className="h-4 w-4" /> ออกจากห้อง
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col md:flex-row gap-4">
